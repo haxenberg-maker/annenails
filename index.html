@@ -159,12 +159,20 @@
   .cal-cell{
     position:relative; aspect-ratio:1/1; border:none; background:none; border-radius:50%;
     display:flex; align-items:center; justify-content:center; font-size:13.5px; color:var(--ink);
+    box-sizing:border-box; padding:0; margin:0; /* nicio schimbare de cutie la selectare/hover */
   }
   .cal-cell.empty{ pointer-events:none; }
   .cal-cell:not(.empty):hover{ background:var(--accent-soft); }
   .cal-cell.today .cal-daynum{ font-weight:700; text-decoration:underline; text-underline-offset:3px; }
-  .cal-cell.selected{ background:var(--accent); }
+  .cal-cell.selected{ background:var(--accent); border:none; }
   .cal-cell.selected .cal-daynum{ color:#fff; font-weight:700; }
+  /* Container cu dimensiune FIXĂ pentru cifra zilei, ca „bold” (today/selected)
+     să nu schimbe lățimea textului și să provoace un mic „jump” vizual. */
+  .cal-daynum{
+    display:flex; align-items:center; justify-content:center;
+    width:26px; height:26px; box-sizing:border-box;
+    font-variant-numeric:tabular-nums; line-height:1;
+  }
   .cal-lines{
     position:absolute; bottom:4px; left:15%; right:15%; height:3px;
     display:flex; gap:1.5px; align-items:flex-end;
