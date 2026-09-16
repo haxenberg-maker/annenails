@@ -368,9 +368,16 @@
   .client-list{ max-height:210px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; margin-bottom:6px; }
   .client-row{
     width:100%; display:flex; align-items:center; gap:10px; padding:9px 10px;
-    border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); text-align:left;
+    border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); text-align:left; cursor:pointer;
   }
   .client-row:hover{ border-color:var(--accent); }
+  .client-row-actions{ display:flex; gap:6px; flex:none; margin-left:auto; }
+  .icon-btn-sm{
+    width:26px; height:26px; border-radius:50%; border:1px solid var(--border); background:var(--bg);
+    color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex:none;
+  }
+  .icon-btn-sm:hover{ border-color:var(--accent); color:var(--accent); }
+  .client-row-delete:hover{ border-color:var(--accent); color:var(--accent); }
   .client-avatar{
     flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-soft);
     color:var(--accent-dark); font-weight:700; font-size:12.5px; display:flex; align-items:center; justify-content:center;
@@ -438,6 +445,13 @@
   .model-swatch{ width:11px; height:11px; border-radius:50%; flex:none; border:1px solid rgba(0,0,0,.08); }
   .model-meta{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
   .model-desc{ font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.4; }
+  .model-actions{ display:flex; gap:14px; margin-top:8px; }
+  .model-actions .link-btn{ font-size:12.5px; padding:0; }
+  .model-delete-btn{ color:var(--accent); }
+  .model-gallery-preview{ display:flex; flex-wrap:wrap; gap:8px; margin:-6px 0 14px 0; }
+  .model-gallery-preview img{
+    width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--border); background:var(--accent-soft);
+  }
   .service-form-row{ display:flex; gap:10px; }
   .service-form-row .field{ flex:1; }
   .color-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
@@ -676,7 +690,7 @@ function wireReminderCopyButtons(container){
     a.addEventListener('click', (ev) => ev.stopPropagation());
   });
 }
-const WEEKDAYS_RO = ['DUM','LUN','MAR','MIE','JOI','VIN','SÂM'];
+const WEEKDAYS_RO = ['LUN','MAR','MIE','JOI','VIN','SÂM','DUM'];
 const DAYS_MON_FIRST = [
   { jsDay: 1, label: 'Luni' },
   { jsDay: 2, label: 'Marți' },
@@ -930,10 +944,8 @@ async function getEmployees(){
   return data;
 }
 
-async function getServices(){
-  const { data, error } = await sb.from('services').select().eq('active', true).order('name');
-  if (error) throw error;
-  return data.map(s => ({
+function mapServiceRow(s){
+  return {
     id: s.id,
     name: s.name,
     durationMinutes: s.duration_minutes,
@@ -943,7 +955,13 @@ async function getServices(){
     description: s.description || '',
     images: parseImagesField(s.images, s.image_url || null),
     tags: parseTagsField(s.tags),
-  }));
+  };
+}
+
+async function getServices(){
+  const { data, error } = await sb.from('services').select().eq('active', true).order('name');
+  if (error) throw error;
+  return data.map(mapServiceRow);
 }
 
 async function addService({ name, durationMinutes, price, color, imageUrl, description, images, tags, includeMedia, includeGallery }){
@@ -959,6 +977,26 @@ async function addService({ name, durationMinutes, price, color, imageUrl, descr
   const { data, error } = await sb.from('services').insert(payload).select().single();
   if (error) throw error;
   return data;
+}
+
+async function updateServiceRow(id, { name, durationMinutes, price, color, imageUrl, description, images, tags, includeMedia, includeGallery }){
+  const payload = { name, duration_minutes: durationMinutes, price, color };
+  if (includeMedia){
+    payload.image_url = imageUrl || null;
+    payload.description = description || null;
+  }
+  if (includeGallery){
+    payload.images = (images && images.length) ? images.join('\n') : null;
+    payload.tags = (tags && tags.length) ? tags.join(',') : null;
+  }
+  const { data, error } = await sb.from('services').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function deactivateServiceRow(id){
+  const { error } = await sb.from('services').update({ active: false }).eq('id', id);
+  if (error) throw error;
 }
 
 async function serviceColorColumnExists(){
@@ -992,6 +1030,19 @@ async function addClient({ name, phone, notes }){
   const { data, error } = await sb.from('clients').insert(insertObj).select().single();
   if (error) throw error;
   return data;
+}
+
+async function updateClientRow(id, { name, phone, notes }){
+  const { data, error } = await sb.from('clients')
+    .update({ name, phone: phone || null, notes: notes || null })
+    .eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteClientRow(id){
+  const { error } = await sb.from('clients').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /** Creează o clientă cu suport offline: dacă rețeaua nu răspunde, o salvează
@@ -1479,7 +1530,7 @@ function renderCalendar(){
   const grid = document.getElementById('calGrid');
   const y = state.calendarMonth.getFullYear();
   const m = state.calendarMonth.getMonth();
-  const firstWeekday = new Date(y, m, 1).getDay();
+  const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7;
   const totalDays = new Date(y, m + 1, 0).getDate();
   const today = new Date();
 
@@ -1724,7 +1775,8 @@ function clientPickerHtml(prefix){
   `;
 }
 
-function renderClientList(prefix, query, onSelect){
+function renderClientList(prefix, query, onSelect, opts){
+  opts = opts || {};
   const listEl = document.getElementById(`${prefix}ClientList`);
   if (!listEl) return;
   const q = (query || '').trim().toLowerCase();
@@ -1734,20 +1786,46 @@ function renderClientList(prefix, query, onSelect){
     return;
   }
   listEl.innerHTML = filtered.slice(0, 30).map(c => `
-    <button type="button" class="client-row" data-id="${c.id}">
+    <div class="client-row" data-id="${c.id}" tabindex="0" role="button">
       <span class="client-avatar">${escapeHtml(initials(c.name))}</span>
       <span class="client-row-info">
         <span class="client-row-name">${escapeHtml(c.name)}${c.pendingOffline ? '<em>offline</em>' : ''}</span>
         ${c.phone ? `<span class="client-row-phone">${escapeHtml(c.phone)}</span>` : ''}
       </span>
-    </button>
+      ${opts.showActions ? `
+        <span class="client-row-actions">
+          <button type="button" class="icon-btn-sm client-row-edit" data-id="${c.id}" title="Editează clienta">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button type="button" class="icon-btn-sm client-row-delete" data-id="${c.id}" title="Șterge clienta">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </span>
+      ` : ''}
+    </div>
   `).join('');
   listEl.querySelectorAll('.client-row').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('.client-row-actions')) return;
       const client = state.clients.find(c => c.id === row.dataset.id);
       onSelect(client);
     });
   });
+  if (opts.showActions){
+    listEl.querySelectorAll('.client-row-edit').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const client = state.clients.find(c => c.id === btn.dataset.id);
+        if (client) openEditClientModal(client);
+      });
+    });
+    listEl.querySelectorAll('.client-row-delete').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        deleteClientWithConfirm(btn.dataset.id);
+      });
+    });
+  }
 }
 
 function showSelectedClient(prefix, client, onChangeClick){
@@ -2160,8 +2238,8 @@ async function renderClientsScreen(){
   } catch (e){ /* folosim ce avem local dacă e offline */ }
 
   const searchInput = document.getElementById('browseClientSearch');
-  searchInput.addEventListener('input', () => renderClientList('browse', searchInput.value, openClientDetail));
-  renderClientList('browse', '', openClientDetail);
+  searchInput.addEventListener('input', () => renderClientList('browse', searchInput.value, openClientDetail, { showActions: true }));
+  renderClientList('browse', '', openClientDetail, { showActions: true });
 }
 
 /* ---------- Modal detaliu clientă + istoric programări ---------- */
@@ -2177,7 +2255,12 @@ function ensureClientDetailModal(){
         </button>
       </div>
       <div class="sheet-body">
-        <p class="settings-hint" id="clientDetailPhone" style="margin-bottom:14px;"></p>
+        <p class="settings-hint" id="clientDetailPhone" style="margin-bottom:6px;"></p>
+        <p class="settings-hint hidden" id="clientDetailNotes" style="margin-bottom:14px;"></p>
+        <div class="model-actions" id="clientDetailActions" style="margin:0 0 16px 0;">
+          <button type="button" class="link-btn" id="clientDetailEditBtn">Editează</button>
+          <button type="button" class="link-btn model-delete-btn" id="clientDetailDeleteBtn">Șterge</button>
+        </div>
         <h2 style="font-family:var(--font-display); font-weight:600; font-size:15px; margin:0 0 8px 0;">Istoric programări</h2>
         <div id="clientHistoryList"><div class="spinner"></div></div>
       </div>
@@ -2209,6 +2292,11 @@ async function openClientDetail(client){
   ensureClientDetailModal();
   document.getElementById('clientDetailName').textContent = client.name;
   document.getElementById('clientDetailPhone').textContent = client.phone ? `Telefon: ${client.phone}` : 'Fără telefon salvat';
+  const notesEl = document.getElementById('clientDetailNotes');
+  if (client.notes){ notesEl.textContent = `Notițe: ${client.notes}`; notesEl.classList.remove('hidden'); }
+  else { notesEl.textContent = ''; notesEl.classList.add('hidden'); }
+  document.getElementById('clientDetailEditBtn').onclick = () => openEditClientModal(client);
+  document.getElementById('clientDetailDeleteBtn').onclick = () => deleteClientWithConfirm(client.id, () => document.getElementById('clientDetailModal').close());
   const histEl = document.getElementById('clientHistoryList');
   histEl.innerHTML = `<div class="spinner"></div>`;
   document.getElementById('clientDetailModal').showModal();
@@ -2232,6 +2320,130 @@ async function openClientDetail(client){
     `).join('');
   } catch (e){
     histEl.innerHTML = `<p class="error-text">${isNetworkError(e) ? 'Fără conexiune — istoricul nu poate fi încărcat acum.' : 'Eroare: ' + escapeHtml(e.message || e)}</p>`;
+  }
+}
+
+/* ---------- Editare / Ștergere clientă ---------- */
+function ensureEditClientModal(){
+  if (document.getElementById('editClientModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="editClientModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Editează clienta</div>
+        <button class="icon-btn" id="closeEditClientModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="field"><label for="editClientName">Nume</label><input id="editClientName" type="text" /></div>
+        <div class="field"><label for="editClientPhone">Telefon</label><input id="editClientPhone" type="tel" /></div>
+        <div class="field"><label for="editClientNotes">Notițe / Observații</label><textarea id="editClientNotes" rows="3" placeholder="Preferințe, alergii, observații…"></textarea></div>
+        <p class="error-text hidden" id="editClientError"></p>
+      </div>
+      <div class="sheet-footer">
+        <button class="btn-primary" id="saveEditClientBtn">Salvează modificările</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('editClientModal'));
+  document.getElementById('closeEditClientModal').addEventListener('click', () => document.getElementById('editClientModal').close());
+  document.getElementById('saveEditClientBtn').addEventListener('click', saveEditClient);
+}
+
+const editClientState = { id: null };
+
+function openEditClientModal(client){
+  ensureEditClientModal();
+  editClientState.id = client.id;
+  document.getElementById('editClientName').value = client.name || '';
+  document.getElementById('editClientPhone').value = client.phone || '';
+  document.getElementById('editClientNotes').value = client.notes || '';
+  document.getElementById('editClientError').classList.add('hidden');
+  document.getElementById('editClientModal').showModal();
+}
+
+/** Actualizează instant numele/telefonul clientei peste tot în UI: lista
+ * generală, picker-ul din modalele de programare, cardul de clientă
+ * selectată și programările deja afișate în agendă. */
+function applyClientUpdateEverywhere(updated){
+  const idx = state.clients.findIndex(c => c.id === updated.id);
+  if (idx >= 0) state.clients[idx] = { ...state.clients[idx], ...updated };
+  state.clients.sort((a, b) => a.name.localeCompare(b.name));
+  cache.appointments.forEach(a => { if (a.clientId === updated.id) a.clientName = updated.name; });
+  if (state.appointments) state.appointments.forEach(a => { if (a.clientId === updated.id) a.clientName = updated.name; });
+  renderDayFromCache();
+}
+
+async function saveEditClient(){
+  const id = editClientState.id;
+  if (!id) return;
+  const btn = document.getElementById('saveEditClientBtn');
+  const errEl = document.getElementById('editClientError');
+  errEl.classList.add('hidden');
+  const name = document.getElementById('editClientName').value.trim();
+  const phone = document.getElementById('editClientPhone').value.trim();
+  const notes = document.getElementById('editClientNotes').value.trim();
+  if (!name){ errEl.textContent = 'Numele clientei este obligatoriu.'; errEl.classList.remove('hidden'); return; }
+
+  btn.disabled = true; btn.textContent = 'Se salvează…';
+  const toastId = showToast('Se salvează clienta…', 'saving', { persist: true });
+  try {
+    let updated;
+    if (String(id).startsWith('offline-client')){
+      updated = { id, name, phone, notes, pendingOffline: true };
+      const pendingItem = state.pendingClients.find(p => p.id === id);
+      if (pendingItem){ pendingItem.payload = { name, phone, notes }; savePendingClients(); }
+    } else {
+      updated = await updateClientRow(id, { name, phone, notes });
+    }
+    applyClientUpdateEverywhere(updated);
+    document.getElementById('editClientModal').close();
+    // Reîmprospătează orice listă de cliente vizibilă (pagina Cliente sau picker-ele din modale).
+    if (document.getElementById('browseClientList')) renderClientList('browse', document.getElementById('browseClientSearch')?.value || '', openClientDetail, { showActions: true });
+    Object.keys(pickerHandlers).forEach(prefix => {
+      const search = document.getElementById(`${prefix}ClientSearch`);
+      if (search) renderClientList(prefix, search.value, pickerHandlers[prefix]);
+    });
+    if (document.getElementById('clientDetailModal') && document.getElementById('clientDetailModal').open){
+      document.getElementById('clientDetailName').textContent = updated.name;
+      document.getElementById('clientDetailPhone').textContent = updated.phone ? `Telefon: ${updated.phone}` : 'Fără telefon salvat';
+    }
+    updateToast(toastId, 'Clientă actualizată.', 'success', 1800);
+  } catch (e){
+    errEl.textContent = 'Eroare la salvare: ' + (e.message || e);
+    errEl.classList.remove('hidden');
+    updateToast(toastId, 'Eroare la salvare.', 'error', 2600);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvează modificările';
+  }
+}
+
+/** Șterge clienta din Supabase + din memorie, apoi actualizează instant
+ * lista de cliente vizibilă. onDone (opțional) rulează după ștergerea reușită. */
+async function deleteClientWithConfirm(id, onDone){
+  const client = state.clients.find(c => c.id === id);
+  if (!client) return;
+  if (!confirm(`Ștergi definitiv clienta „${client.name}”? Această acțiune nu poate fi anulată.`)) return;
+  const toastId = showToast('Se șterge…', 'saving', { persist: true });
+  try {
+    if (!String(id).startsWith('offline-client')){
+      await deleteClientRow(id);
+    } else {
+      state.pendingClients = state.pendingClients.filter(p => p.id !== id);
+      savePendingClients();
+    }
+    state.clients = state.clients.filter(c => c.id !== id);
+    if (document.getElementById('browseClientList')) renderClientList('browse', document.getElementById('browseClientSearch')?.value || '', openClientDetail, { showActions: true });
+    Object.keys(pickerHandlers).forEach(prefix => {
+      const search = document.getElementById(`${prefix}ClientSearch`);
+      if (search) renderClientList(prefix, search.value, pickerHandlers[prefix]);
+    });
+    updateToast(toastId, 'Clientă ștearsă.', 'success', 1800);
+    if (onDone) onDone();
+  } catch (e){
+    updateToast(toastId, 'Eroare la ștergere: ' + (e.message || e), 'error', 3000);
   }
 }
 
@@ -2635,10 +2847,24 @@ function renderServicesList(){
         ${s.description ? `<div class="model-desc">${escapeHtml(s.description)}</div>` : ''}
         ${extraThumbs.length ? `<div class="model-gallery-strip">${extraThumbs.map((u, i) => `<img class="model-gallery-thumb" src="${escapeHtml(u)}" data-svc="${s.id}" data-img="${i + 1}" alt="" />`).join('')}</div>` : ''}
         ${(s.tags && s.tags.length) ? `<div class="model-tags">${s.tags.map(t => `<button type="button" class="model-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}</div>` : ''}
+        <div class="model-actions">
+          <button type="button" class="link-btn model-edit-btn" data-svc="${s.id}">Editează</button>
+          <button type="button" class="link-btn model-delete-btn" data-svc="${s.id}">Șterge</button>
+        </div>
       </div>
     </div>
   `;
   }).join('');
+
+  list.querySelectorAll('.model-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const svc = state.services.find(s => s.id === btn.dataset.svc);
+      if (svc) openEditServiceModal(svc);
+    });
+  });
+  list.querySelectorAll('.model-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteServiceWithConfirm(btn.dataset.svc));
+  });
 
   list.querySelectorAll('img[data-svc]').forEach(img => {
     img.addEventListener('click', () => {
@@ -2821,6 +3047,142 @@ async function saveNewService(){
     updateToast(toastId, 'Eroare la adăugare.', 'error', 2600);
   } finally {
     btn.disabled = false; btn.textContent = 'Adaugă serviciul';
+  }
+}
+
+/* ---------- Editare / Ștergere serviciu existent ---------- */
+const editServiceState = { id: null };
+
+function ensureEditServiceModal(){
+  if (document.getElementById('editServiceModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="editServiceModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Editează serviciul</div>
+        <button class="icon-btn" id="closeEditServiceModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="field"><label for="editSvcName">Nume serviciu</label><input id="editSvcName" type="text" /></div>
+        <div class="service-form-row">
+          <div class="field"><label for="editSvcDuration">Durată (minute)</label><input id="editSvcDuration" type="number" min="5" step="5" /></div>
+          <div class="field"><label for="editSvcPrice">Preț (lei)</label><input id="editSvcPrice" type="number" min="0" step="1" /></div>
+        </div>
+        <div class="field">
+          <label>Culoare</label>
+          <div class="color-row"><input type="color" id="editSvcColor" /></div>
+        </div>
+        <div class="field">
+          <label for="editSvcImages">Poze model (un URL pe linie sau separate prin virgulă)</label>
+          <textarea id="editSvcImages" rows="3" placeholder="https://…&#10;https://…"></textarea>
+        </div>
+        <div class="model-gallery-preview" id="editSvcImagesPreview"></div>
+        <div class="field">
+          <label for="editSvcTags">Hashtag-uri (separate prin virgulă)</label>
+          <input id="editSvcTags" type="text" placeholder="french, gel, babyboomer" />
+        </div>
+        <div class="field">
+          <label for="editSvcDescription">Descriere model</label>
+          <textarea id="editSvcDescription" rows="3"></textarea>
+        </div>
+        <p class="error-text hidden" id="editSvcError"></p>
+      </div>
+      <div class="sheet-footer">
+        <button class="btn-primary" id="saveEditSvcBtn">Salvează modificările</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('editServiceModal'));
+  document.getElementById('closeEditServiceModal').addEventListener('click', () => document.getElementById('editServiceModal').close());
+  document.getElementById('editSvcImages').addEventListener('input', renderEditSvcImagesPreview);
+  document.getElementById('saveEditSvcBtn').addEventListener('click', saveEditService);
+}
+
+/** Randare instantă (0ms) a miniaturilor pe măsură ce se tastează URL-urile. */
+function renderEditSvcImagesPreview(){
+  const raw = document.getElementById('editSvcImages').value.trim();
+  const imgs = parseImagesField(raw, null);
+  const wrap = document.getElementById('editSvcImagesPreview');
+  if (!imgs.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = imgs.map(u => `<img src="${escapeHtml(u)}" alt="" onerror="this.style.opacity='0.25'" />`).join('');
+}
+
+function openEditServiceModal(service){
+  ensureEditServiceModal();
+  editServiceState.id = service.id;
+  document.getElementById('editSvcName').value = service.name;
+  document.getElementById('editSvcDuration').value = service.durationMinutes;
+  document.getElementById('editSvcPrice').value = service.price;
+  document.getElementById('editSvcColor').value = service.color || DEFAULT_SERVICE_COLOR;
+  document.getElementById('editSvcImages').value = (service.images && service.images.length) ? service.images.join('\n') : (service.imageUrl || '');
+  document.getElementById('editSvcTags').value = (service.tags || []).join(', ');
+  document.getElementById('editSvcDescription').value = service.description || '';
+  document.getElementById('editSvcError').classList.add('hidden');
+  renderEditSvcImagesPreview();
+  document.getElementById('editServiceModal').showModal();
+}
+
+async function saveEditService(){
+  const id = editServiceState.id;
+  if (!id) return;
+  const btn = document.getElementById('saveEditSvcBtn');
+  const errEl = document.getElementById('editSvcError');
+  errEl.classList.add('hidden');
+  const name = document.getElementById('editSvcName').value.trim();
+  const durationMinutes = parseInt(document.getElementById('editSvcDuration').value, 10);
+  const price = parseFloat(document.getElementById('editSvcPrice').value);
+  const color = document.getElementById('editSvcColor').value || DEFAULT_SERVICE_COLOR;
+  const imagesRaw = document.getElementById('editSvcImages').value.trim();
+  const tagsRaw = document.getElementById('editSvcTags').value.trim();
+  const description = document.getElementById('editSvcDescription').value.trim();
+  const images = parseImagesField(imagesRaw, null);
+  const tags = parseTagsField(tagsRaw);
+
+  if (!name){ errEl.textContent = 'Numele serviciului este obligatoriu.'; errEl.classList.remove('hidden'); return; }
+  if (!durationMinutes || durationMinutes <= 0){ errEl.textContent = 'Durata trebuie să fie un număr de minute mai mare ca 0.'; errEl.classList.remove('hidden'); return; }
+  if (isNaN(price) || price < 0){ errEl.textContent = 'Prețul trebuie să fie un număr valid.'; errEl.classList.remove('hidden'); return; }
+
+  btn.disabled = true; btn.textContent = 'Se salvează…';
+  const toastId = showToast('Se salvează serviciul…', 'saving', { persist: true });
+  try {
+    const row = await updateServiceRow(id, {
+      name, durationMinutes, price, color,
+      imageUrl: images[0] || '', description, images, tags,
+      includeMedia: !!state.serviceMediaColumnsOk,
+      includeGallery: !!state.serviceGalleryColumnsOk,
+    });
+    const updated = mapServiceRow(row);
+    const idx = state.services.findIndex(s => s.id === id);
+    if (idx >= 0) state.services[idx] = updated; // instant valabil în orice modal/agendă
+    document.getElementById('editServiceModal').close();
+    renderTagPills();
+    renderServicesList();
+    updateToast(toastId, 'Serviciu actualizat.', 'success', 1800);
+  } catch (e){
+    errEl.textContent = 'Eroare la salvare: ' + (e.message || e);
+    errEl.classList.remove('hidden');
+    updateToast(toastId, 'Eroare la salvare.', 'error', 2600);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvează modificările';
+  }
+}
+
+async function deleteServiceWithConfirm(id){
+  const svc = state.services.find(s => s.id === id);
+  if (!svc) return;
+  if (!confirm(`Ștergi serviciul „${svc.name}”? Nu va mai putea fi selectat la programări noi.`)) return;
+  const toastId = showToast('Se șterge…', 'saving', { persist: true });
+  try {
+    await deactivateServiceRow(id);
+    state.services = state.services.filter(s => s.id !== id);
+    renderTagPills();
+    renderServicesList();
+    updateToast(toastId, 'Serviciu șters.', 'success', 1800);
+  } catch (e){
+    updateToast(toastId, 'Eroare la ștergere: ' + (e.message || e), 'error', 3000);
   }
 }
 
