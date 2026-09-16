@@ -1,0 +1,3533 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Programări Unghii</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#FBF3EE;
+    --surface:#FFFFFF;
+    --border:#F0DFD6;
+    --ink:#2B211F;
+    --ink-soft:#7A6A64;
+    --accent:#9B2247;
+    --accent-dark:#7A1836;
+    --accent-soft:#F3D9DE;
+    --success:#4C7A5D;
+    --success-soft:#E4EEE6;
+    --muted:#B3A29B;
+    --warn:#B8860B;
+    --info:#2E5F8A;
+    --job-block:#8C7B74;
+    --job-block-soft:#EDE7E3;
+    --radius-lg:22px;
+    --radius-md:14px;
+    --radius-sm:9px;
+    --shadow:0 10px 28px rgba(43,33,31,0.10);
+    --font-display:'Fraunces', serif;
+    --font-body:'Work Sans', sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  button{ font-family:inherit; cursor:pointer; }
+  input, select, textarea{ font-family:inherit; }
+  #app{ max-width:480px; margin:0 auto; min-height:100%; position:relative; padding-bottom:96px; }
+  @media (min-width:780px){
+    #app{ max-width:940px; }
+  }
+
+  /* ---------- TOASTS ---------- */
+  .toast-container{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:80;
+    display:flex; flex-direction:column; gap:8px; align-items:center; max-width:92vw;
+  }
+  .toast{
+    padding:9px 16px; border-radius:999px; font-size:12.5px; font-weight:600; color:#fff;
+    box-shadow:var(--shadow); display:flex; align-items:center; gap:8px; white-space:nowrap;
+    max-width:92vw; overflow:hidden; text-overflow:ellipsis;
+  }
+  .toast-saving{ background:var(--info); }
+  .toast-success{ background:var(--success); }
+  .toast-error{ background:var(--accent-dark); }
+  .toast-warning{ background:var(--warn); }
+  .toast-info{ background:var(--ink); }
+  .toast-spin{ width:12px; height:12px; border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; animation:spin .7s linear infinite; flex:none; }
+
+  /* ---------- LOGIN ---------- */
+  .login-screen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:24px; max-width:480px; margin:0 auto;
+  }
+  .login-card{ width:100%; }
+  .login-mark{
+    width:52px; height:52px; border-radius:50%;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-size:24px; font-weight:600;
+    margin:0 auto 18px auto;
+  }
+  .login-title{
+    font-family:var(--font-display); font-weight:600; font-size:26px;
+    text-align:center; margin:0 0 6px 0;
+  }
+  .login-sub{
+    text-align:center; color:var(--ink-soft); font-size:14px; margin:0 0 28px 0;
+  }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:13px; color:var(--ink-soft); margin-bottom:6px; }
+  .field input, .field textarea{
+    width:100%; padding:12px 14px; border-radius:var(--radius-sm);
+    border:1px solid var(--border); background:var(--surface);
+    font-size:15px; color:var(--ink); outline:none;
+  }
+  .field textarea{ resize:vertical; min-height:64px; }
+  .field input:focus, .field textarea:focus{ border-color:var(--accent); }
+  .btn-primary{
+    width:100%; padding:13px 14px; border-radius:var(--radius-sm);
+    background:var(--accent); color:#fff; border:none; font-size:15px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-primary:hover{ background:var(--accent-dark); }
+  .btn-primary:disabled{ opacity:.6; cursor:default; }
+  .btn-outline{
+    padding:9px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); font-size:13.5px; font-weight:600; color:var(--ink);
+  }
+  .btn-outline:hover{ border-color:var(--accent); color:var(--accent-dark); }
+  .error-text{ color:var(--accent); font-size:13.5px; margin:0 0 14px 0; }
+  .success-text{ color:var(--success); font-size:13.5px; margin:0 0 14px 0; }
+
+  /* ---------- HEADER ---------- */
+  header.top{
+    position:sticky; top:0; z-index:5; background:var(--bg);
+    padding:18px 18px 14px 18px; border-bottom:1px solid var(--border);
+  }
+  .top-row{ display:flex; align-items:center; justify-content:space-between; }
+  .brand{ display:flex; flex-direction:column; }
+  .brand-title-row{ display:flex; align-items:center; gap:7px; }
+  .brand-title{ font-family:var(--font-display); font-weight:600; font-size:20px; }
+  .conn-dot{ width:9px; height:9px; border-radius:50%; background:var(--success); flex:none; }
+  .conn-dot.offline{ background:var(--warn); }
+  .brand-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:1px; }
+  .header-actions{ display:flex; gap:8px; }
+  .icon-btn{
+    position:relative;
+    width:36px; height:36px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); display:flex; align-items:center; justify-content:center;
+    color:var(--ink-soft);
+  }
+  .icon-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .badge-count{
+    position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px;
+    border-radius:999px; background:var(--warn); color:#fff; font-size:10px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; line-height:1; border:2px solid var(--bg);
+  }
+
+  /* ---------- BOARD: mini calendar + agenda ---------- */
+  .board{ display:grid; grid-template-columns:1fr; gap:18px; padding:18px; }
+  @media (min-width:780px){
+    .board{ grid-template-columns:320px 1fr; align-items:start; }
+  }
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:18px; box-shadow:var(--shadow);
+  }
+  .cal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .cal-month-label{ font-family:var(--font-display); font-weight:600; font-size:17px; }
+  .cal-nav{ display:flex; gap:6px; }
+  .cal-nav button{
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--ink-soft);
+  }
+  .cal-nav button:hover{ border-color:var(--accent); color:var(--accent); }
+  .cal-weekdays{
+    display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
+    font-size:11px; color:var(--ink-soft); margin-bottom:6px; letter-spacing:.02em;
+  }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-cell{
+    position:relative; aspect-ratio:1/1; border:none; background:none; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:13.5px; color:var(--ink);
+  }
+  .cal-cell.empty{ pointer-events:none; }
+  .cal-cell:not(.empty):hover{ background:var(--accent-soft); }
+  .cal-cell.today .cal-daynum{ font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+  .cal-cell.selected{ background:var(--accent); }
+  .cal-cell.selected .cal-daynum{ color:#fff; font-weight:700; }
+  .cal-lines{
+    position:absolute; bottom:4px; left:15%; right:15%; height:3px;
+    display:flex; gap:1.5px; align-items:flex-end;
+  }
+  .cal-line{ flex:1; height:3px; border-radius:2px; min-width:2px; }
+  .cal-cell.selected .cal-line{ background:#fff !important; opacity:.85; }
+  .cal-today-btn{
+    margin-top:14px; width:100%; padding:9px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--bg); font-size:13px; font-weight:600; color:var(--ink-soft);
+  }
+  .cal-today-btn:hover{ border-color:var(--accent); color:var(--accent-dark); }
+
+  .agenda-employee{ font-size:12.5px; color:var(--ink-soft); }
+  .agenda-date{ font-family:var(--font-display); font-weight:600; font-size:19px; margin-top:2px; margin-bottom:16px; }
+
+  .day-state{ text-align:center; color:var(--ink-soft); font-size:14px; padding:48px 12px; }
+
+  .appt-card{
+    display:flex; gap:14px; align-items:flex-start; background:var(--bg);
+    border:1px solid var(--border); border-left:4px solid var(--accent);
+    border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px; cursor:pointer;
+  }
+  .appt-card:hover{ box-shadow:0 4px 14px rgba(43,33,31,.08); }
+  .appt-time{
+    flex:none; width:56px; font-family:var(--font-display); font-weight:600;
+    font-size:15px; line-height:1.25; color:var(--accent-dark); padding-top:1px;
+  }
+  .appt-time small{ display:block; font-weight:400; color:var(--ink-soft); font-size:12px; }
+  .appt-body{ flex:1; min-width:0; }
+  .appt-client{ font-weight:600; font-size:15px; }
+  .appt-service{ font-size:13.5px; color:var(--ink-soft); margin-top:2px; display:flex; align-items:center; gap:6px; }
+  .appt-service .swatch{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .appt-tag{
+    display:inline-block; margin-top:6px; margin-right:6px; font-size:11.5px; padding:2px 8px;
+    border-radius:20px; background:var(--muted); color:#fff;
+  }
+  .appt-tag.pending-tag{ background:var(--warn); }
+  .appt-cancel{
+    flex:none; width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
+  }
+  .appt-cancel:hover{ border-color:var(--accent); color:var(--accent); }
+  .appt-card.cancelled{ opacity:.55; border-left-color:var(--muted) !important; }
+  .appt-card.cancelled .appt-client, .appt-card.cancelled .appt-service{ text-decoration:line-through; }
+
+  /* ---------- Reamintire: Copiază mesaj + WhatsApp ---------- */
+  .reminder-actions{ display:flex; flex-direction:column; gap:6px; flex:none; }
+  .reminder-btn{
+    width:30px; height:30px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
+    text-decoration:none; cursor:pointer;
+  }
+  .reminder-copy-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .reminder-wa-btn{ border-color:#25D36655; color:#25D366; }
+  .reminder-wa-btn:hover{ border-color:#25D366; background:#25D36618; }
+  .unconf-card .reminder-actions{ flex-direction:row; margin-top:8px; }
+
+  .block-card{
+    display:flex; gap:14px; align-items:flex-start; background:var(--job-block-soft);
+    border:1px dashed var(--job-block); border-left:4px solid var(--job-block);
+    border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px;
+  }
+  .block-time{
+    flex:none; width:56px; font-family:var(--font-display); font-weight:600;
+    font-size:15px; line-height:1.25; color:var(--job-block); padding-top:1px;
+  }
+  .block-time small{ display:block; font-weight:400; color:var(--ink-soft); font-size:12px; }
+  .block-body{ flex:1; min-width:0; }
+  .block-label{ font-weight:600; font-size:14px; color:var(--ink); }
+  .block-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .current-slot-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:11px 14px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--bg); font-family:var(--font-display); font-weight:600; font-size:15px;
+  }
+
+  .history-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .history-row:last-child{ border-bottom:none; }
+  .history-date{ font-size:12px; color:var(--ink-soft); flex:none; width:90px; }
+  .history-mid{ flex:1; min-width:0; font-size:13.5px; font-weight:600; display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+  .history-price{ font-size:12.5px; color:var(--ink-soft); flex:none; }
+  .history-status{ font-size:10.5px; padding:2px 7px; border-radius:20px; background:var(--muted); color:#fff; }
+
+  .unconf-card{
+    background:var(--bg); border:1px solid var(--border); border-left:4px solid var(--warn);
+    border-radius:var(--radius-md); padding:14px; margin-bottom:10px;
+  }
+  .unconf-top{ margin-bottom:12px; }
+  .unconf-client{ font-weight:600; font-size:15px; }
+  .unconf-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .unconf-actions{ display:flex; gap:8px; }
+  .unconf-actions button{ flex:1; padding:9px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; border:none; color:#fff; }
+  .btn-confirm{ background:var(--success); }
+  .btn-confirm:hover{ opacity:.9; }
+  .btn-decline{ background:var(--accent); }
+  .btn-decline:hover{ background:var(--accent-dark); }
+
+  .spinner{
+    width:22px; height:22px; border-radius:50%; border:3px solid var(--border);
+    border-top-color:var(--accent); animation:spin .7s linear infinite; margin:36px auto;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position:fixed; right:24px; bottom:24px; z-index:6;
+    background:var(--accent); color:#fff; border:none; border-radius:18px;
+    padding:14px 20px; font-size:14.5px; font-weight:600; box-shadow:0 12px 24px rgba(155,34,71,0.35);
+    display:flex; align-items:center; gap:8px;
+  }
+  .fab:hover{ background:var(--accent-dark); }
+
+  /* ---------- Setări: secțiune pliabilă „Interval orar” ---------- */
+  #hoursDetails{ padding:0; }
+  #hoursDetails > summary{ list-style:none; cursor:pointer; }
+  #hoursDetails > summary::-webkit-details-marker{ display:none; }
+  .hours-summary{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
+  .hours-summary-toggle{
+    font-size:12.5px; font-weight:600; color:var(--accent);
+    border:1px solid var(--accent); border-radius:999px; padding:6px 12px; flex:none;
+  }
+  #hoursDetails[open] .hours-summary-toggle::after{ content:' (ascunde)'; }
+  .hours-details-body{ margin-top:14px; }
+
+  /* ---------- MODAL (centrat pe ecran) ---------- */
+  dialog{
+    border:none; padding:0; width:90%; max-width:440px;
+    top:50%; left:50%; right:auto; bottom:auto; margin:0;
+    transform:translate(-50%, -50%);
+    border-radius:var(--radius-lg); box-shadow:var(--shadow); max-height:88vh;
+  }
+  dialog::backdrop{ background:rgba(43,33,31,0.45); }
+  dialog[open]{
+    display:flex; flex-direction:column;
+    animation:modalPop .18s ease-out;
+  }
+  @keyframes modalPop{
+    from{ transform:translate(-50%, -50%) scale(.96); opacity:0; }
+    to{ transform:translate(-50%, -50%) scale(1); opacity:1; }
+  }
+  .sheet-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 18px 12px 18px; border-bottom:1px solid var(--border); flex:none;
+  }
+  .sheet-title{ font-family:var(--font-display); font-weight:600; font-size:19px; }
+  .sheet-body{ padding:16px 18px; overflow-y:auto; flex:1; }
+  .sheet-footer{ padding:14px 18px 20px 18px; border-top:1px solid var(--border); flex:none; }
+
+  .field select{
+    width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); font-size:15px; color:var(--ink); appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237A6A64' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat; background-position:right 12px center;
+  }
+  .modal-date-row{ display:flex; align-items:center; gap:8px; }
+  .date-arrow-sm{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); flex:none; display:flex; align-items:center; justify-content:center; color:var(--ink-soft);
+  }
+  .date-arrow-sm:hover{ border-color:var(--accent); color:var(--accent); }
+  .date-picker-wrap{ position:relative; flex:1; }
+  .date-label{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:11px 12px; font-family:var(--font-display);
+    font-size:15px; font-weight:600; color:var(--ink); text-align:center;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .date-input-hidden{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .link-btn{
+    background:none; border:none; color:var(--accent-dark); font-size:13.5px; font-weight:600;
+    padding:2px 0; margin-top:-4px; margin-bottom:14px;
+  }
+  .new-client-box{
+    background:var(--bg); border:1px dashed var(--border); border-radius:var(--radius-sm);
+    padding:12px; margin:-6px 0 14px 0;
+  }
+  .new-client-box .field{ margin-bottom:8px; }
+  .new-client-box .btn-secondary{
+    width:100%; padding:9px; border-radius:var(--radius-sm); border:none;
+    background:var(--ink); color:#fff; font-size:13.5px; font-weight:600;
+  }
+  .slots-label{ font-size:13.5px; color:var(--ink-soft); margin:4px 0 10px 0; }
+  .slots-wrap{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
+  .slot-btn{
+    width:100%; display:flex; align-items:center; gap:9px; text-align:left;
+    padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); font-size:14px; font-weight:600; color:var(--accent-dark);
+  }
+  .slot-btn .dot{ width:6px; height:6px; border-radius:50%; background:var(--success); flex:none; }
+  .slot-btn.selected{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .slot-btn.selected .dot{ background:#fff; }
+  .hint-text{ font-size:13.5px; color:var(--ink-soft); }
+
+  /* ---------- CLIENT PICKER ---------- */
+  .client-search-input{
+    width:100%; padding:11px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); font-size:14px; margin-bottom:8px;
+  }
+  .client-list{ max-height:210px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; margin-bottom:6px; }
+  .client-row{
+    width:100%; display:flex; align-items:center; gap:10px; padding:9px 10px;
+    border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface); text-align:left;
+  }
+  .client-row:hover{ border-color:var(--accent); }
+  .client-avatar{
+    flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent-soft);
+    color:var(--accent-dark); font-weight:700; font-size:12.5px; display:flex; align-items:center; justify-content:center;
+  }
+  .client-row-info{ display:flex; flex-direction:column; min-width:0; }
+  .client-row-name{ font-size:13.5px; font-weight:600; color:var(--ink); }
+  .client-row-name em{ font-style:normal; color:var(--warn); font-weight:600; font-size:11px; margin-left:4px; }
+  .client-row-phone{ font-size:12px; color:var(--ink-soft); }
+  .client-empty{ font-size:13px; color:var(--ink-soft); padding:10px 4px; }
+  .client-selected{
+    display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border);
+    border-radius:var(--radius-sm); background:var(--bg); margin-bottom:8px;
+  }
+  .client-selected .client-row-info{ flex:1; }
+  .client-change-btn{ flex:none; padding:6px 10px; font-size:12px; }
+
+  /* ---------- SETTINGS ---------- */
+  .settings-section{ margin-bottom:18px; }
+  .settings-section h2{ font-family:var(--font-display); font-weight:600; font-size:17px; margin:0 0 4px 0; }
+  .settings-section .settings-hint{ font-size:13px; color:var(--ink-soft); margin:0 0 14px 0; }
+  .wd-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 0; border-bottom:1px solid var(--border);
+  }
+  .wd-row:last-child{ border-bottom:none; }
+  .wd-label{ flex:none; width:96px; font-weight:600; font-size:13.5px; }
+  .wd-date{ display:block; font-weight:400; font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+  .wd-times{ display:flex; align-items:center; gap:6px; flex:1; justify-content:flex-end; }
+  .time-input{
+    padding:8px 9px; border:1px solid var(--border); border-radius:8px;
+    font-size:13.5px; width:98px; color:var(--ink); background:var(--surface);
+  }
+  .time-input:disabled{ background:var(--bg); color:var(--muted); }
+  .wd-sep{ color:var(--ink-soft); font-size:12px; }
+  .wd-off{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); flex:none; }
+  .wd-off input{ width:15px; height:15px; }
+  .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .week-range{ font-family:var(--font-display); font-weight:600; font-size:15px; }
+  .setup-note{
+    background:var(--bg); border-left:3px solid var(--accent); border-radius:8px;
+    padding:12px 14px; margin-bottom:14px; font-size:12.5px; color:var(--ink-soft);
+  }
+  .setup-note pre{
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:10px; font-size:11px; overflow-x:auto; margin:8px 0; color:var(--ink);
+  }
+  .back-row{ display:flex; align-items:center; gap:10px; }
+  .back-row .icon-btn{ flex:none; }
+
+  .model-card{
+    display:flex; gap:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius-md);
+    background:var(--bg); margin-bottom:10px;
+  }
+  .model-thumb{
+    flex:none; width:64px; height:64px; border-radius:var(--radius-sm); object-fit:cover;
+    background:var(--accent-soft); border:1px solid var(--border);
+  }
+  .model-thumb-fallback{
+    flex:none; width:64px; height:64px; border-radius:var(--radius-sm); background:var(--accent-soft);
+    border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--accent-dark);
+  }
+  .model-body{ flex:1; min-width:0; }
+  .model-title-row{ display:flex; align-items:center; gap:7px; }
+  .model-name{ font-weight:600; font-size:14.5px; }
+  .model-swatch{ width:11px; height:11px; border-radius:50%; flex:none; border:1px solid rgba(0,0,0,.08); }
+  .model-meta{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .model-desc{ font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.4; }
+  .service-form-row{ display:flex; gap:10px; }
+  .service-form-row .field{ flex:1; }
+  .color-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .color-row input[type=color]{
+    width:44px; height:38px; border:1px solid var(--border); border-radius:8px; padding:2px; background:var(--surface);
+  }
+  .preset-swatches{ display:flex; gap:7px; }
+  .preset-swatch{
+    width:22px; height:22px; border-radius:50%; border:2px solid var(--surface);
+    box-shadow:0 0 0 1px var(--border); cursor:pointer;
+  }
+  .preset-swatch.active{ box-shadow:0 0 0 2px var(--ink); }
+
+  .stats-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .stat-card{ background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; text-align:center; }
+  .stat-value{ font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--accent-dark); }
+  .stat-label{ font-size:12px; color:var(--ink-soft); margin-top:4px; }
+
+  /* ---------- VACATION ---------- */
+  .vacation-card{
+    display:flex; gap:12px; align-items:center; background:var(--job-block-soft);
+    border:1px solid var(--border); border-left:4px solid var(--job-block);
+    border-radius:var(--radius-md); padding:16px 14px; margin-bottom:14px;
+  }
+  .vacation-card-icon{ font-size:24px; flex:none; }
+  .vacation-card-title{ font-family:var(--font-display); font-weight:700; font-size:14.5px; letter-spacing:.03em; color:var(--ink); }
+  .vacation-card-desc{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .vacation-banner{
+    background:var(--job-block-soft); border:1px solid var(--job-block); border-radius:var(--radius-sm);
+    padding:10px 12px; font-size:13px; color:var(--ink); margin:-2px 0 14px 0; display:flex; gap:8px; align-items:flex-start;
+  }
+  .cal-cell.vacation:not(.selected){ box-shadow:inset 0 0 0 40px var(--vac-tint, transparent); }
+
+  /* ---------- TAG PILLS & MODEL GALLERY ---------- */
+  .tag-pills{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .tag-pill{
+    padding:6px 12px; border-radius:999px; border:1px solid var(--border);
+    background:var(--surface); font-size:12px; font-weight:600; color:var(--ink-soft);
+  }
+  .tag-pill.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tag-pill:hover{ border-color:var(--accent); color:var(--accent-dark); }
+  .model-gallery-strip{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .model-gallery-thumb{ width:44px; height:44px; border-radius:8px; object-fit:cover; border:1px solid var(--border); cursor:pointer; }
+  .model-tags{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .model-tag-pill{
+    font-size:10.5px; padding:2px 8px; border-radius:999px; background:var(--accent-soft);
+    color:var(--accent-dark); font-weight:600; border:none; cursor:pointer;
+  }
+
+  /* ---------- LIGHTBOX ---------- */
+  dialog.lightbox-dialog{
+    width:100vw; height:100vh; max-width:100vw; max-height:100vh; border-radius:0;
+    background:rgba(20,14,13,0.96); position:relative;
+  }
+  dialog.lightbox-dialog[open]{
+    display:flex; align-items:center; justify-content:center;
+  }
+  dialog.lightbox-dialog::backdrop{ background:rgba(20,14,13,0.96); }
+  .lightbox-img{ max-width:92vw; max-height:82vh; object-fit:contain; border-radius:10px; }
+  .lightbox-close{ position:absolute; top:16px; right:16px; background:rgba(255,255,255,.15); border:none; color:#fff; }
+  .lightbox-close:hover{ background:rgba(255,255,255,.28); color:#fff; }
+  .lightbox-nav{
+    position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%;
+    border:none; background:rgba(255,255,255,.15); color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center;
+  }
+  .lightbox-nav:hover{ background:rgba(255,255,255,.28); }
+  .lightbox-prev{ left:14px; }
+  .lightbox-next{ right:14px; }
+  .lightbox-counter{
+    position:absolute; bottom:22px; left:50%; transform:translateX(-50%); color:#fff; font-size:12.5px;
+    background:rgba(255,255,255,.15); padding:4px 12px; border-radius:999px;
+  }
+
+  /* ---------- CLIENT GALLERY (full-screen catalog) ---------- */
+  dialog.client-gallery-dialog{
+    width:100vw; height:100vh; max-width:100vw; max-height:100vh; border-radius:0; top:0; left:0; transform:none;
+  }
+  .client-gallery-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .client-gallery-card{ text-align:center; }
+  .client-gallery-cover{
+    width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:var(--radius-md); border:1px solid var(--border); cursor:pointer;
+    background:var(--accent-soft);
+  }
+  .client-gallery-name{ font-weight:600; font-size:13px; margin-top:7px; }
+  .client-gallery-tags{ display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:4px; }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+/* ====================== CONFIG ====================== */
+const SUPABASE_URL = 'https://mvsgyaojvrlrhvvetzeh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12c2d5YW9qdnJscmh2dmV0emVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MzI5OTYsImV4cCI6MjEwNTAwODk5Nn0._PLc8dfFh4A_zQjdtZAg_K5zyQSEQUxHX6UX5W2V_wc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const DEFAULT_SERVICE_COLOR = '#9B2247';
+const PRESET_COLORS = ['#9B2247', '#4C7A5D', '#2E5F8A', '#B8860B', '#6B4E9C', '#C1553A'];
+const PENDING_APPTS_KEY = 'pending_appointments';
+const PENDING_CLIENTS_KEY = 'pending_clients';
+
+const WEEKDAY_HOURS_SETUP_SQL =
+`create table if not exists public.weekday_hours (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employees(id) on delete cascade,
+  weekday smallint not null check (weekday between 0 and 6),
+  start_minutes int not null,
+  end_minutes int not null,
+  unique (employee_id, weekday)
+);
+
+alter table public.weekday_hours enable row level security;
+
+create policy "authenticated can manage weekday_hours"
+on public.weekday_hours
+for all
+to authenticated
+using (true)
+with check (true);`;
+
+const SERVICE_COLOR_SETUP_SQL =
+`alter table public.services
+  add column if not exists color text not null default '${DEFAULT_SERVICE_COLOR}';`;
+
+const SERVICE_MEDIA_SETUP_SQL =
+`alter table public.services
+  add column if not exists image_url text,
+  add column if not exists description text;`;
+
+const APPOINTMENTS_STATUS_SETUP_SQL =
+`alter table public.appointments drop constraint if exists appointments_status_check;
+alter table public.appointments add constraint appointments_status_check
+  check (status in ('confirmed', 'cancelled', 'completed', 'unconfirmed'));`;
+
+const VACATIONS_SETUP_SQL =
+`create table if not exists public.vacations (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employees(id) on delete cascade,
+  start_date date not null,
+  end_date date not null,
+  description text,
+  color text not null default '#B3A29B'
+);
+
+alter table public.vacations enable row level security;
+
+create policy "authenticated can manage vacations"
+on public.vacations
+for all
+to authenticated
+using (true)
+with check (true);`;
+
+const SERVICE_GALLERY_SETUP_SQL =
+`alter table public.services
+  add column if not exists images text,
+  add column if not exists tags text;`;
+
+const VACATION_PRESET_COLORS = ['#B3A29B', '#D9B9A5', '#A9C6B8', '#B7C4DE', '#D8B7C8', '#E3C878'];
+
+/* ====================== HELPERS ====================== */
+const fmtDateHeader = d => new Intl.DateTimeFormat('ro-RO', { weekday:'long', day:'numeric', month:'long' }).format(d)
+  .replace(/^./, c => c.toUpperCase());
+const fmtDateShort = d => new Intl.DateTimeFormat('ro-RO', { day:'numeric', month:'short' }).format(d);
+const fmtMonthHeader = d => new Intl.DateTimeFormat('ro-RO', { month:'long', year:'numeric' }).format(d)
+  .replace(/^./, c => c.toUpperCase());
+const fmtTime = d => new Intl.DateTimeFormat('ro-RO', { hour:'2-digit', minute:'2-digit' }).format(d);
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const isSameDay = (a,b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+const escapeHtml = s => (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad2 = n => String(n).padStart(2,'0');
+const minutesToHHMM = min => `${pad2(Math.floor(min/60))}:${pad2(min%60)}`;
+const hhmmToMinutes = str => { const [h,m] = str.split(':').map(Number); return h*60+m; };
+const mondayOf = d => { const wd=(d.getDay()+6)%7; const m=new Date(d.getFullYear(),d.getMonth(),d.getDate()); m.setDate(m.getDate()-wd); return m; };
+
+/* ---------- Mesaj de reamintire (Copiază + WhatsApp) ---------- */
+const fmtDateDDMMYYYY = d => `${pad2(d.getDate())}.${pad2(d.getMonth()+1)}.${d.getFullYear()}`;
+
+function buildReminderMessage(clientName, startTime){
+  return `Buna, ${clientName || 'Clientă'}, ai o programare pentru data de _*${fmtDateDDMMYYYY(startTime)}*_, ora: ${fmtTime(startTime)}`;
+}
+
+function clientPhoneById(clientId){
+  const c = state.clients.find(cl => cl.id === clientId);
+  return (c && c.phone) ? c.phone.trim() : '';
+}
+
+/** Normalizează numărul pentru link-ul wa.me: doar cifre, iar dacă începe
+ * cu 0 (format local RO) îl înlocuim cu prefixul de țară 40. */
+function phoneForWhatsApp(phone){
+  if (!phone) return '';
+  let digits = phone.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+')) digits = digits.slice(1);
+  if (digits.startsWith('0')) digits = '40' + digits.slice(1);
+  return digits;
+}
+
+/** Butoanele „Copiază mesaj” + „WhatsApp” pentru un card de programare
+ * (folosite atât în Agendă cât și în lista de Neconfirmate). */
+function reminderActionsHtml(appt){
+  const msg = buildReminderMessage(appt.clientName, appt.startTime);
+  const phone = clientPhoneById(appt.clientId);
+  const waPhone = phoneForWhatsApp(phone);
+  const waHref = waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : '';
+  return `
+    <div class="reminder-actions">
+      <button type="button" class="reminder-btn reminder-copy-btn" data-msg="${escapeHtml(msg)}" title="Copiază mesaj reamintire">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+      </button>
+      ${waHref ? `<a class="reminder-btn reminder-wa-btn" href="${waHref}" target="_blank" rel="noopener" title="Trimite pe WhatsApp">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.52 3.48A11.87 11.87 0 0 0 12.04 0C5.5 0 .2 5.3.2 11.84c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.68a11.8 11.8 0 0 0 5.63 1.43h.01c6.54 0 11.84-5.3 11.84-11.84 0-3.16-1.23-6.14-3.36-8.43zM12.04 21.4a9.5 9.5 0 0 1-4.85-1.33l-.35-.21-3.8 1 1.01-3.7-.23-.38a9.5 9.5 0 1 1 8.22 4.62zm5.2-7.13c-.28-.14-1.67-.82-1.93-.92-.26-.1-.45-.14-.64.14-.19.28-.74.92-.9 1.1-.17.19-.33.21-.61.07-.28-.14-1.18-.44-2.25-1.4-.83-.74-1.39-1.66-1.55-1.94-.16-.28-.02-.43.12-.57.13-.13.28-.33.42-.5.14-.17.19-.28.28-.47.09-.19.05-.35-.02-.5-.07-.14-.64-1.54-.88-2.11-.23-.55-.47-.48-.64-.49-.17-.01-.36-.01-.55-.01-.19 0-.5.07-.76.35-.26.28-1 1-1 2.43 0 1.43 1.03 2.82 1.18 3.01.14.19 2.03 3.1 4.92 4.35.69.3 1.22.48 1.64.61.69.22 1.32.19 1.82.11.55-.08 1.67-.68 1.9-1.34.24-.66.24-1.22.17-1.34-.07-.12-.26-.19-.54-.33z"/></svg>
+      </a>` : ''}
+    </div>
+  `;
+}
+
+/** Conectează click-ul butoanelor „Copiază mesaj” dintr-un container dat. */
+function wireReminderCopyButtons(container){
+  if (!container) return;
+  container.querySelectorAll('.reminder-copy-btn').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const msg = btn.dataset.msg || '';
+      try {
+        await navigator.clipboard.writeText(msg);
+        showToast('Mesaj copiat în clipboard!', 'success', { autoHide: 1800 });
+      } catch (e){
+        showToast('Nu am putut copia automat — selectează manual textul.', 'error', { autoHide: 2600 });
+      }
+    });
+  });
+  container.querySelectorAll('.reminder-wa-btn').forEach(a => {
+    a.addEventListener('click', (ev) => ev.stopPropagation());
+  });
+}
+const WEEKDAYS_RO = ['DUM','LUN','MAR','MIE','JOI','VIN','SÂM'];
+const DAYS_MON_FIRST = [
+  { jsDay: 1, label: 'Luni' },
+  { jsDay: 2, label: 'Marți' },
+  { jsDay: 3, label: 'Miercuri' },
+  { jsDay: 4, label: 'Joi' },
+  { jsDay: 5, label: 'Vineri' },
+  { jsDay: 6, label: 'Sâmbătă' },
+  { jsDay: 0, label: 'Duminică' },
+];
+const uid = prefix => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+const initials = name => (name||'').trim().split(/\s+/).slice(0,2).map(w => w[0] ? w[0].toUpperCase() : '').join('');
+
+function hexToRgba(hex, alpha){
+  let h = (hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const num = parseInt(h, 16);
+  if (isNaN(num)) return `rgba(179,162,155,${alpha})`;
+  const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function parseImagesField(raw, fallbackSingle){
+  const list = (raw || '').split(/\r?\n|,/).map(s => s.trim()).filter(Boolean);
+  if (list.length === 0 && fallbackSingle) return [fallbackSingle];
+  return list;
+}
+function parseTagsField(raw){
+  return (raw || '').split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
+}
+
+function dayHoursFor(day){
+  const cfg = state.weekdayHours[day.getDay()];
+  return cfg || { startMin: 8*60, endMin: 22*60 };
+}
+
+function isNetworkError(e){
+  if (!navigator.onLine) return true;
+  if (!e) return false;
+  const msg = ((e && e.message) || '').toLowerCase();
+  return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed') || msg.includes('network request failed');
+}
+
+/* ====================== APP STATE ====================== */
+const root = document.getElementById('root');
+const state = {
+  session: null,
+  employee: null,
+  selectedDay: new Date(),
+  calendarMonth: null,
+  monthDayColors: new Map(),
+  vacationDaysInMonth: new Map(),
+  appointments: [],
+  dayJobBlocks: [],
+  services: [],
+  clients: [],
+  weekdayHours: {},
+  weekdayHoursMissingTable: false,
+  serviceMediaColumnsOk: false,
+  serviceGalleryColumnsOk: false,
+  vacationsMissingTable: false,
+  pendingAppointments: [],
+  pendingClients: [],
+};
+
+/* ====================== IN-MEMORY CACHE ======================
+ * Sursa unică de adevăr pentru programări/blocuri/concedii — populată
+ * printr-o singură interogare la bootstrap (bulkLoadCache) pentru un
+ * interval extins (luna trecută → luna viitoare). Navigarea prin zile/
+ * luni filtrează direct acest obiect, fără nicio cerere de rețea. */
+const cache = {
+  appointments: [],
+  jobBlocks: [],
+  vacations: [],
+  rangeFrom: null,
+  rangeTo: null,
+};
+
+/* ====================== TOASTS ====================== */
+function ensureToastContainer(){
+  if (document.getElementById('toastContainer')) return;
+  const el = document.createElement('div');
+  el.id = 'toastContainer';
+  el.className = 'toast-container';
+  document.body.appendChild(el);
+}
+
+function showToast(message, type, opts){
+  opts = opts || {};
+  ensureToastContainer();
+  const container = document.getElementById('toastContainer');
+  const id = opts.id || uid('toast');
+  let el = document.getElementById(id);
+  if (!el){
+    el = document.createElement('div');
+    el.id = id;
+    container.appendChild(el);
+  }
+  el.className = `toast toast-${type || 'info'}`;
+  el.innerHTML = (type === 'saving' ? '<span class="toast-spin"></span>' : '') + `<span>${escapeHtml(message)}</span>`;
+  clearTimeout(el._hideTimer);
+  if (!opts.persist){
+    el._hideTimer = setTimeout(() => { el.remove(); }, opts.autoHide || 2200);
+  }
+  return id;
+}
+function updateToast(id, message, type, autoHide){
+  showToast(message, type, { id, persist: !autoHide, autoHide });
+}
+function dismissToast(id){
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+/* ====================== CONNECTIVITY DOT ====================== */
+function updateConnDot(){
+  const dot = document.getElementById('connDot');
+  if (!dot) return;
+  dot.classList.toggle('offline', !navigator.onLine);
+  dot.title = navigator.onLine ? 'Conectat' : 'Fără conexiune';
+}
+
+/* ====================== OFFLINE QUEUE (localStorage) ====================== */
+function loadPendingFromStorage(){
+  try { state.pendingAppointments = JSON.parse(localStorage.getItem(PENDING_APPTS_KEY) || '[]'); }
+  catch (e){ state.pendingAppointments = []; }
+  try { state.pendingClients = JSON.parse(localStorage.getItem(PENDING_CLIENTS_KEY) || '[]'); }
+  catch (e){ state.pendingClients = []; }
+}
+function savePendingAppointments(){ localStorage.setItem(PENDING_APPTS_KEY, JSON.stringify(state.pendingAppointments)); }
+function savePendingClients(){ localStorage.setItem(PENDING_CLIENTS_KEY, JSON.stringify(state.pendingClients)); }
+
+function queueOfflineAppointment(payload){
+  const item = { id: uid('offline-appt'), payload, createdAt: Date.now() };
+  state.pendingAppointments.push(item);
+  savePendingAppointments();
+  return item;
+}
+function queueOfflineClient(payload){
+  const item = { id: uid('offline-client'), payload, createdAt: Date.now() };
+  state.pendingClients.push(item);
+  savePendingClients();
+  return item;
+}
+
+function pendingApptToDisplay(item){
+  const p = item.payload;
+  const client = state.clients.find(c => c.id === p.clientId);
+  const service = state.services.find(s => s.id === p.serviceId);
+  return {
+    id: item.id,
+    employeeId: p.employeeId,
+    clientId: p.clientId,
+    serviceId: p.serviceId,
+    startTime: new Date(p.start),
+    endTime: new Date(p.end),
+    status: p.status || 'unconfirmed',
+    notes: p.notes,
+    clientName: client ? client.name : 'Clientă (offline)',
+    serviceName: service ? service.name : 'Serviciu (offline)',
+    serviceColor: service ? service.color : DEFAULT_SERVICE_COLOR,
+    pendingOffline: true,
+  };
+}
+
+async function trySyncOfflineQueue(){
+  if (!navigator.onLine) return;
+  if (state.pendingClients.length === 0 && state.pendingAppointments.length === 0) return;
+
+  const toastId = showToast('Se sincronizează datele salvate offline…', 'saving', { persist: true });
+  const clientIdMap = {};
+  let syncedClients = 0, syncedAppointments = 0;
+  const remainingClients = [];
+  const remainingAppointments = [];
+
+  for (const item of state.pendingClients){
+    try {
+      const real = await addClient(item.payload);
+      clientIdMap[item.id] = real.id;
+      syncedClients++;
+      const idx = state.clients.findIndex(c => c.id === item.id);
+      if (idx >= 0) state.clients[idx] = real;
+    } catch (e){
+      if (isNetworkError(e)) remainingClients.push(item);
+      // altfel: cerere invalidă -> renunțăm la ea, nu blocăm restul cozii
+    }
+  }
+
+  for (const item of state.pendingAppointments){
+    try {
+      const payload = Object.assign({}, item.payload);
+      if (clientIdMap[payload.clientId]) payload.clientId = clientIdMap[payload.clientId];
+      if (String(payload.clientId).startsWith('offline-client')){
+        remainingAppointments.push(item); // clienta ei încă nu s-a sincronizat
+        continue;
+      }
+      await addAppointment({
+        employeeId: payload.employeeId,
+        clientId: payload.clientId,
+        serviceId: payload.serviceId,
+        start: new Date(payload.start),
+        end: new Date(payload.end),
+        notes: payload.notes,
+        status: payload.status || 'unconfirmed',
+      });
+      syncedAppointments++;
+    } catch (e){
+      if (isNetworkError(e)) remainingAppointments.push(item);
+      // altfel (ex: suprapunere) -> renunțăm la acea programare, e un caz marginal
+    }
+  }
+
+  state.pendingClients = remainingClients;
+  state.pendingAppointments = remainingAppointments;
+  savePendingClients();
+  savePendingAppointments();
+  state.clients = state.clients.filter(c => !c.pendingOffline || remainingClients.some(i => i.id === c.id));
+
+  // Reconciliem cache-ul: re-descărcăm intervalul cunoscut (înlocuiește
+  // intrările optimiste sincronizate cu rândurile reale), apoi re-adăugăm
+  // programările care încă n-au reușit să se sincronizeze.
+  await forceRefreshCache();
+  mergePendingIntoCache();
+
+  if (syncedAppointments > 0 || syncedClients > 0){
+    updateToast(toastId, `Reconectat! Am sincronizat ${syncedAppointments} programări și ${syncedClients} cliente noi efectuate offline.`, 'success', 3600);
+  } else {
+    dismissToast(toastId);
+  }
+
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+}
+
+window.addEventListener('online', () => {
+  updateConnDot();
+  dismissToast('offlineBanner');
+  showToast('Conexiune restabilită.', 'info', { autoHide: 1600 });
+  trySyncOfflineQueue();
+});
+window.addEventListener('offline', () => {
+  updateConnDot();
+  showToast('Fără conexiune — ce salvezi acum rămâne local și se trimite automat la reconectare.', 'warning', { persist: true, id: 'offlineBanner' });
+});
+
+/* ====================== DATA LAYER ====================== */
+
+async function getEmployees(){
+  const { data, error } = await sb.from('employees').select().eq('active', true);
+  if (error) throw error;
+  return data;
+}
+
+async function getServices(){
+  const { data, error } = await sb.from('services').select().eq('active', true).order('name');
+  if (error) throw error;
+  return data.map(s => ({
+    id: s.id,
+    name: s.name,
+    durationMinutes: s.duration_minutes,
+    price: s.price,
+    color: s.color || DEFAULT_SERVICE_COLOR,
+    imageUrl: s.image_url || null,
+    description: s.description || '',
+    images: parseImagesField(s.images, s.image_url || null),
+    tags: parseTagsField(s.tags),
+  }));
+}
+
+async function addService({ name, durationMinutes, price, color, imageUrl, description, images, tags, includeMedia, includeGallery }){
+  const payload = { name, duration_minutes: durationMinutes, price, color, active: true };
+  if (includeMedia){
+    payload.image_url = imageUrl || null;
+    payload.description = description || null;
+  }
+  if (includeGallery){
+    payload.images = (images && images.length) ? images.join('\n') : null;
+    payload.tags = (tags && tags.length) ? tags.join(',') : null;
+  }
+  const { data, error } = await sb.from('services').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function serviceColorColumnExists(){
+  const { error } = await sb.from('services').select('color').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+async function serviceMediaColumnsExist(){
+  const { error } = await sb.from('services').select('image_url, description').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+async function serviceGalleryColumnsExist(){
+  const { error } = await sb.from('services').select('images, tags').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+async function getClients(){
+  const { data, error } = await sb.from('clients').select().order('name');
+  if (error) throw error;
+  return data;
+}
+
+async function addClient({ name, phone, notes }){
+  const insertObj = { name };
+  if (phone) insertObj.phone = phone;
+  if (notes) insertObj.notes = notes;
+  const { data, error } = await sb.from('clients').insert(insertObj).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Creează o clientă cu suport offline: dacă rețeaua nu răspunde, o salvează
+ * local (coadă `pending_clients`) și o pune la dispoziție instant în UI. */
+async function createClientSmart(name, phone){
+  if (navigator.onLine){
+    try {
+      const client = await addClient({ name, phone });
+      // Adăugăm clienta nou-creată în lista globală imediat, ca să fie
+      // disponibilă instant în orice picker/căutare din aplicație.
+      state.clients.push(client);
+      state.clients.sort((a, b) => a.name.localeCompare(b.name));
+      return { ok: true, offline: false, client };
+    } catch (e){
+      if (!isNetworkError(e)) throw e;
+    }
+  }
+  const item = queueOfflineClient({ name, phone });
+  const localClient = { id: item.id, name, phone, pendingOffline: true };
+  state.clients.push(localClient);
+  state.clients.sort((a, b) => a.name.localeCompare(b.name));
+  return { ok: true, offline: true, client: localClient };
+}
+
+async function getMainJobBlocks({ employeeId, from, to }){
+  const { data, error } = await sb.from('main_job_blocks').select()
+    .eq('employee_id', employeeId)
+    .gte('start_time', from.toISOString())
+    .lte('end_time', to.toISOString())
+    .order('start_time');
+  if (error) throw error;
+  return data;
+}
+
+async function clearDayJobBlock(employeeId, day){
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+  const { error } = await sb.from('main_job_blocks').delete()
+    .eq('employee_id', employeeId)
+    .gte('start_time', dayStart.toISOString())
+    .lt('start_time', dayEnd.toISOString());
+  if (error) throw error;
+}
+
+async function setDayJobBlock(employeeId, day, startHHMM, endHHMM){
+  await clearDayJobBlock(employeeId, day);
+  const [sh, sm] = startHHMM.split(':').map(Number);
+  const [eh, em] = endHHMM.split(':').map(Number);
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), sh, sm);
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), eh, em);
+  const { error } = await sb.from('main_job_blocks').insert({
+    employee_id: employeeId, start_time: start.toISOString(), end_time: end.toISOString(), label: 'Celălalt job',
+  });
+  if (error) throw error;
+}
+
+function mapApptRow(row){
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    clientId: row.client_id,
+    serviceId: row.service_id,
+    startTime: new Date(row.start_time),
+    endTime: new Date(row.end_time),
+    status: row.status,
+    notes: row.notes,
+    clientName: row.clients ? row.clients.name : null,
+    serviceName: row.services ? row.services.name : null,
+    serviceColor: (row.services && row.services.color) ? row.services.color : DEFAULT_SERVICE_COLOR,
+  };
+}
+
+async function getAppointments({ employeeId, from, to }){
+  const { data, error } = await sb.from('appointments')
+    .select('*, clients(name), services(name, color)')
+    .eq('employee_id', employeeId)
+    .gte('start_time', from.toISOString())
+    .lte('end_time', to.toISOString())
+    .order('start_time');
+  if (error) throw error;
+  return data.map(mapApptRow);
+}
+
+async function getUnconfirmedAppointments(employeeId){
+  const { data, error } = await sb.from('appointments')
+    .select('*, clients(name), services(name, color)')
+    .eq('employee_id', employeeId)
+    .eq('status', 'unconfirmed')
+    .order('start_time');
+  if (error) throw error;
+  return data.map(mapApptRow);
+}
+
+async function addAppointment({ employeeId, clientId, serviceId, start, end, notes, status }){
+  const { data, error } = await sb.from('appointments').insert({
+    employee_id: employeeId, client_id: clientId, service_id: serviceId,
+    start_time: start.toISOString(), end_time: end.toISOString(), notes: notes || null,
+    status: status || 'unconfirmed',
+  }).select('*, clients(name), services(name, color)').single();
+  if (error){
+    if (error.code === '23P01') throw new Error('Intervalul se suprapune cu o altă programare sau cu jobul principal.');
+    throw error;
+  }
+  return data;
+}
+
+async function cancelAppointment(id){
+  const { error } = await sb.from('appointments').update({ status: 'cancelled' }).eq('id', id);
+  if (error) throw error;
+}
+
+async function updateAppointmentRow(id, payload){
+  const { error } = await sb.from('appointments').update(payload).eq('id', id);
+  if (error){
+    if (error.code === '23P01') throw new Error('Intervalul se suprapune cu o altă programare sau cu jobul principal.');
+    if (error.code === '23514') { const e = new Error('STATUS_CHECK'); e.isStatusCheck = true; throw e; }
+    throw error;
+  }
+}
+
+async function getWeekdayHours(employeeId){
+  const { data, error } = await sb.from('weekday_hours').select().eq('employee_id', employeeId);
+  if (error){
+    if (error.code === '42P01' || (error.message || '').includes('does not exist')) return { map: {}, missingTable: true };
+    throw error;
+  }
+  const map = {};
+  (data || []).forEach(r => { map[r.weekday] = { startMin: r.start_minutes, endMin: r.end_minutes }; });
+  return { map, missingTable: false };
+}
+
+async function saveWeekdayHours(employeeId, rows){
+  const payload = rows.map(r => ({ employee_id: employeeId, weekday: r.weekday, start_minutes: r.startMin, end_minutes: r.endMin }));
+  const { error } = await sb.from('weekday_hours').upsert(payload, { onConflict: 'employee_id,weekday' });
+  if (error) throw error;
+}
+
+/* ---------- VACAȚII / ZILE LIBERE ---------- */
+async function getVacations(employeeId){
+  const { data, error } = await sb.from('vacations').select().eq('employee_id', employeeId).order('start_date');
+  if (error){
+    if (error.code === '42P01' || (error.message || '').includes('does not exist')) return { list: [], missingTable: true };
+    throw error;
+  }
+  return {
+    list: (data || []).map(v => ({
+      id: v.id,
+      employeeId: v.employee_id,
+      start: new Date(v.start_date + 'T00:00:00'),
+      end: new Date(v.end_date + 'T00:00:00'),
+      description: v.description || '',
+      color: v.color || '#B3A29B',
+    })),
+    missingTable: false,
+  };
+}
+
+async function addVacation({ employeeId, startDate, endDate, description, color }){
+  const { data, error } = await sb.from('vacations').insert({
+    employee_id: employeeId, start_date: startDate, end_date: endDate,
+    description: description || null, color: color || '#B3A29B',
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteVacation(id){
+  const { error } = await sb.from('vacations').delete().eq('id', id);
+  if (error) throw error;
+}
+
+function findVacationForDay(day){
+  if (!state.employee) return null;
+  const dstr = ymd(day);
+  return cache.vacations.find(v => v.employeeId === state.employee.id && ymd(v.start) <= dstr && dstr <= ymd(v.end)) || null;
+}
+
+/* ====================== CACHE: bulk load & filtrare instant ====================== */
+async function loadApptsAndBlocksRange(from, to){
+  if (!state.employee) return { appts: [], blocks: [] };
+  const [appts, blocksRaw] = await Promise.all([
+    getAppointments({ employeeId: state.employee.id, from, to }),
+    getMainJobBlocks({ employeeId: state.employee.id, from, to }),
+  ]);
+  const blocks = blocksRaw.map(b => ({
+    id: b.id, employeeId: b.employee_id, start: new Date(b.start_time), end: new Date(b.end_time), label: b.label || 'Celălalt job',
+  }));
+  return { appts, blocks };
+}
+
+function cacheRangeCovers(from, to){
+  return !!(cache.rangeFrom && cache.rangeTo && from >= cache.rangeFrom && to <= cache.rangeTo);
+}
+
+/** Interogare unică la pornire: programări + blocuri (3 luni), concedii, cliente, servicii. */
+async function bulkLoadCache(){
+  if (!state.employee) return;
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const to = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999);
+  const [{ appts, blocks }, vacRes, clients, services] = await Promise.all([
+    loadApptsAndBlocksRange(from, to),
+    getVacations(state.employee.id),
+    getClients(),
+    getServices(),
+  ]);
+  cache.appointments = appts;
+  cache.jobBlocks = blocks;
+  cache.vacations = vacRes.list;
+  state.vacationsMissingTable = vacRes.missingTable;
+  cache.rangeFrom = from;
+  cache.rangeTo = to;
+  state.clients = clients;
+  state.services = services;
+}
+
+/** Extinde cache-ul dacă intervalul cerut depășește ce avem deja local. */
+async function ensureRangeCached(from, to){
+  if (!state.employee) return;
+  if (cacheRangeCovers(from, to)) return;
+  const newFrom = cache.rangeFrom ? new Date(Math.min(from.getTime(), cache.rangeFrom.getTime())) : from;
+  const newTo = cache.rangeTo ? new Date(Math.max(to.getTime(), cache.rangeTo.getTime())) : to;
+  const { appts, blocks } = await loadApptsAndBlocksRange(newFrom, newTo);
+  cache.appointments = appts;
+  cache.jobBlocks = blocks;
+  cache.rangeFrom = newFrom;
+  cache.rangeTo = newTo;
+}
+
+/** Re-descarcă de la zero intervalul deja cunoscut — folosit după reconectare, ca să reconciliem programările sincronizate offline. */
+async function forceRefreshCache(){
+  if (!state.employee || !cache.rangeFrom || !cache.rangeTo) return;
+  try {
+    const { appts, blocks } = await loadApptsAndBlocksRange(cache.rangeFrom, cache.rangeTo);
+    cache.appointments = appts;
+    cache.jobBlocks = blocks;
+  } catch (e){ /* offline — păstrăm ce avem local */ }
+}
+
+/** Adaugă în cache programările salvate offline (din localStorage) care nu s-au sincronizat încă. */
+function mergePendingIntoCache(){
+  state.pendingAppointments.forEach(item => {
+    if (cache.appointments.some(a => a.id === item.id)) return;
+    cache.appointments.push(pendingApptToDisplay(item));
+  });
+}
+
+/** Verifică suprapuneri (blocuri, alte programări, în afara programului zilei) direct din cache — 0ms. */
+function findConflictInCache({ employeeId, day, start, end, excludeApptId }){
+  const blocks = cache.jobBlocks.filter(b => b.employeeId === employeeId && isSameDay(b.start, day));
+  for (const b of blocks){ if (start < b.end && end > b.start) return { start: b.start, end: b.end, type: 'block' }; }
+  const appts = cache.appointments.filter(a => a.employeeId === employeeId && a.status !== 'cancelled' && a.id !== excludeApptId && isSameDay(a.startTime, day));
+  for (const a of appts){ if (start < a.endTime && end > a.startTime) return { start: a.startTime, end: a.endTime, type: 'appt', clientName: a.clientName }; }
+  const { startMin, endMin } = dayHoursFor(day);
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()); dayStart.setMinutes(startMin);
+  const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate()); dayEnd.setMinutes(endMin);
+  if (start < dayStart || end > dayEnd) return { start: dayStart, end: dayEnd, type: 'hours' };
+  return null;
+}
+
+/** Calculează sloturile libere dintr-o zi, direct din cache (0ms în cazul
+ * normal — ziua e deja în intervalul cache-uit la bootstrap). Orele posibile
+ * (Setări → interval pe ziua respectivă) minus blocurile de la celălalt job
+ * minus programările deja confirmate. `excludeApptId` scoate din calcul o
+ * programare anume — folosit la editare, ca propriul interval să nu se
+ * blocheze singur. */
+async function getFreeSlots({ employeeId, day, serviceDurationMinutes, slotStepMinutes = 15, excludeApptId = null }){
+  const rangeCheckStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const rangeCheckEnd = new Date(rangeCheckStart); rangeCheckEnd.setDate(rangeCheckEnd.getDate() + 1);
+  if (!cacheRangeCovers(rangeCheckStart, rangeCheckEnd)){
+    try { await ensureRangeCached(rangeCheckStart, rangeCheckEnd); } catch (e){ /* rămânem cu ce avem local */ }
+  }
+
+  const { startMin, endMin } = dayHoursFor(day);
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  dayStart.setMinutes(startMin);
+  const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  dayEnd.setMinutes(endMin);
+
+  const busy = [
+    ...cache.jobBlocks.filter(b => b.employeeId === employeeId && isSameDay(b.start, day)).map(b => ({ start: b.start, end: b.end })),
+    ...cache.appointments.filter(a => a.employeeId === employeeId && a.status !== 'cancelled' && a.id !== excludeApptId && isSameDay(a.startTime, day)).map(a => ({ start: a.startTime, end: a.endTime })),
+  ].sort((a, b) => a.start - b.start);
+
+  const free = [];
+  const addSlotsInRange = (rangeStart, rangeEnd) => {
+    let slotStart = new Date(rangeStart);
+    while (true){
+      const slotEnd = new Date(slotStart.getTime() + serviceDurationMinutes * 60000);
+      if (slotEnd > rangeEnd) break;
+      free.push({ start: new Date(slotStart), end: slotEnd });
+      slotStart = new Date(slotStart.getTime() + slotStepMinutes * 60000);
+    }
+  };
+
+  let cursor = dayStart;
+  for (const b of busy){
+    if (b.start > cursor) addSlotsInRange(cursor, b.start);
+    if (b.end > cursor) cursor = b.end;
+  }
+  if (dayEnd > cursor) addSlotsInRange(cursor, dayEnd);
+  return free;
+}
+
+/* ====================== ROUTER ====================== */
+function goCalendar(){ location.hash = '#/'; if (location.hash === '#/') handleRoute(); }
+function goSettings(){ location.hash = '#/settings'; }
+function goModels(){ location.hash = '#/models'; }
+function goClients(){ location.hash = '#/clients'; }
+async function handleRoute(){
+  if (!state.session) return;
+  if (location.hash === '#/settings') renderSettingsScreen();
+  else if (location.hash === '#/models') renderModelsScreen();
+  else if (location.hash === '#/clients') renderClientsScreen();
+  else await showCalendarView();
+}
+window.addEventListener('hashchange', handleRoute);
+
+/* ====================== RENDER: LOGIN ====================== */
+function renderLogin(errorMsg){
+  root.innerHTML = `
+    <div class="login-screen">
+      <div class="login-card">
+        <div class="login-mark">U</div>
+        <h1 class="login-title">Programări Unghii</h1>
+        <p class="login-sub">Intră în cont ca să vezi programările</p>
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="loginPass">Parolă</label>
+          <input id="loginPass" type="password" autocomplete="current-password" />
+        </div>
+        ${errorMsg ? `<p class="error-text">${escapeHtml(errorMsg)}</p>` : ''}
+        <button id="loginBtn" class="btn-primary">Intră în cont</button>
+      </div>
+    </div>
+  `;
+  const btn = document.getElementById('loginBtn');
+  const doLogin = async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPass').value;
+    btn.disabled = true; btn.textContent = 'Se conectează…';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) renderLogin('Autentificare eșuată. Verifică email/parolă.');
+  };
+  btn.addEventListener('click', doLogin);
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
+
+/* ====================== RENDER: APP SHELL (calendar) ====================== */
+async function showCalendarView(){
+  renderAppShell();
+  refreshHeaderInfo();
+  await loadMonthDots();
+  loadDay();
+  refreshUnconfirmedBadge();
+}
+
+function renderAppShell(){
+  root.innerHTML = `
+    <div id="app">
+      <header class="top">
+        <div class="top-row">
+          <div class="brand">
+            <div class="brand-title-row">
+              <span class="conn-dot" id="connDot"></span>
+              <span class="brand-title">Programări Unghii</span>
+            </div>
+            <div class="brand-sub" id="employeeSub">Se încarcă…</div>
+          </div>
+          <div class="header-actions">
+            <button class="icon-btn" id="modelsBtn" title="Modele">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13 21l-8-8 7.59-7.59A2 2 0 0 1 14 5h5a2 2 0 0 1 2 2v5a2 2 0 0 1-.41 1.41z"/><circle cx="16.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button class="icon-btn" id="clientsBtn" title="Cliente">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </button>
+            <button class="icon-btn" id="unconfirmedBtn" title="Programări neconfirmate">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span class="badge-count hidden" id="unconfirmedBadge">0</span>
+            </button>
+            <button class="icon-btn" id="settingsBtn" title="Setări">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            <button class="icon-btn" id="logoutBtn" title="Ieși din cont">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+      <div class="board">
+        <section class="panel" id="calendarPanel">
+          <div class="cal-header">
+            <span class="cal-month-label" id="calMonthLabel"></span>
+            <div class="cal-nav">
+              <button id="prevMonth" title="Luna trecută">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <button id="nextMonth" title="Luna următoare">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="cal-weekdays">${WEEKDAYS_RO.map(w => `<div>${w}</div>`).join('')}</div>
+          <div class="cal-grid" id="calGrid"></div>
+          <button class="cal-today-btn" id="todayBtn">Mergi la azi</button>
+        </section>
+        <section class="panel" id="agendaPanel">
+          <div class="agenda-employee" id="employeeSub2">Programul zilei</div>
+          <div class="agenda-date" id="agendaDate"></div>
+          <div id="dayContent"></div>
+        </section>
+      </div>
+      <button class="fab" id="fabAdd">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Programare nouă
+      </button>
+    </div>
+  `;
+
+  document.getElementById('logoutBtn').addEventListener('click', () => sb.auth.signOut());
+  document.getElementById('modelsBtn').addEventListener('click', goModels);
+  document.getElementById('clientsBtn').addEventListener('click', goClients);
+  document.getElementById('unconfirmedBtn').addEventListener('click', openUnconfirmedModal);
+  document.getElementById('settingsBtn').addEventListener('click', goSettings);
+  document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
+  document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
+  document.getElementById('todayBtn').addEventListener('click', async () => {
+    const t = new Date();
+    const monthChanged = !state.calendarMonth || t.getFullYear() !== state.calendarMonth.getFullYear() || t.getMonth() !== state.calendarMonth.getMonth();
+    state.calendarMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    if (monthChanged) await loadMonthDots(); // reîncarcă + recalculează bulinele lunii curente înainte de a seta ziua
+    setDay(t);
+  });
+  document.getElementById('fabAdd').addEventListener('click', openAddModal);
+  updateConnDot();
+}
+
+/** Adaugă închiderea automată la click pe backdrop (în afara chenarului)
+ * pentru orice <dialog>. Click-ul în interiorul chenarului nu ajunge
+ * niciodată la element cu target === dialog (conținutul e în div-uri
+ * copil), așa că verificarea de mai jos vizează exclusiv backdrop-ul. */
+function wireDialogBackdropClose(dialog){
+  if (!dialog || dialog.dataset.backdropWired) return;
+  dialog.dataset.backdropWired = '1';
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+}
+
+function refreshHeaderInfo(){
+  const name = state.employee ? state.employee.name : 'Nicio angajată configurată';
+  const sub = document.getElementById('employeeSub');
+  const sub2 = document.getElementById('employeeSub2');
+  if (sub) sub.textContent = name;
+  if (sub2) sub2.textContent = `Programul lui ${name}`;
+  const agendaDate = document.getElementById('agendaDate');
+  if (agendaDate) agendaDate.textContent = fmtDateHeader(state.selectedDay);
+}
+
+function syncMainViewToDay(day){
+  const monthChanged = !state.calendarMonth || day.getFullYear() !== state.calendarMonth.getFullYear() || day.getMonth() !== state.calendarMonth.getMonth();
+  state.selectedDay = new Date(day);
+  if (monthChanged) state.calendarMonth = new Date(day.getFullYear(), day.getMonth(), 1);
+  refreshHeaderInfo();
+}
+
+function changeMonth(delta){
+  const d = new Date(state.calendarMonth);
+  d.setMonth(d.getMonth() + delta);
+  state.calendarMonth = d;
+  loadMonthDots();
+}
+
+function setDay(d){
+  state.selectedDay = d;
+  refreshHeaderInfo();
+  renderCalendar();
+  loadDay();
+}
+
+/* ====================== MINI CALENDAR ====================== */
+function renderCalendar(){
+  document.getElementById('calMonthLabel').textContent = fmtMonthHeader(state.calendarMonth);
+  const grid = document.getElementById('calGrid');
+  const y = state.calendarMonth.getFullYear();
+  const m = state.calendarMonth.getMonth();
+  const firstWeekday = new Date(y, m, 1).getDay();
+  const totalDays = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+
+  let html = '';
+  for (let i = 0; i < firstWeekday; i++) html += `<div class="cal-cell empty"></div>`;
+  for (let day = 1; day <= totalDays; day++){
+    const d = new Date(y, m, day);
+    const key = ymd(d);
+    const vacColor = state.vacationDaysInMonth.get(key);
+    const cls = ['cal-cell', isSameDay(d, state.selectedDay) ? 'selected' : '', isSameDay(d, today) ? 'today' : '', vacColor ? 'vacation' : ''].join(' ').trim();
+    const colors = state.monthDayColors.get(key) || [];
+    const lines = colors.slice(0, 6).map(c => `<span class="cal-line" style="background:${c}"></span>`).join('');
+    const tintStyle = vacColor ? ` style="--vac-tint:${hexToRgba(vacColor, 0.22)}"` : '';
+    html += `<button type="button" class="${cls}" data-date="${key}"${tintStyle}>
+      <span class="cal-daynum">${day}</span>
+      ${lines ? `<span class="cal-lines">${lines}</span>` : ''}
+    </button>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cal-cell[data-date]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [yy, mm, dd] = btn.dataset.date.split('-').map(Number);
+      setDay(new Date(yy, mm - 1, dd));
+    });
+  });
+}
+
+/** Recalculează culorile/bulinele lunii curente direct din cache — 0ms. */
+function computeMonthDayColorsFromCache(){
+  const map = new Map();
+  const vacDays = new Map();
+  const push = (key, color) => { const l = map.get(key) || []; l.push(color); map.set(key, l); };
+  if (state.employee){
+    const y = state.calendarMonth.getFullYear();
+    const m = state.calendarMonth.getMonth();
+    cache.appointments
+      .filter(a => a.employeeId === state.employee.id && a.status !== 'cancelled' && a.startTime.getFullYear() === y && a.startTime.getMonth() === m)
+      .forEach(a => push(ymd(a.startTime), a.serviceColor));
+    cache.jobBlocks
+      .filter(b => b.employeeId === state.employee.id && b.start.getFullYear() === y && b.start.getMonth() === m)
+      .forEach(b => push(ymd(b.start), 'var(--job-block)'));
+    const monthStart = new Date(y, m, 1);
+    const monthEnd = new Date(y, m + 1, 0);
+    cache.vacations.filter(v => v.employeeId === state.employee.id).forEach(v => {
+      const cur = new Date(Math.max(v.start.getTime(), monthStart.getTime()));
+      const end = new Date(Math.min(v.end.getTime(), monthEnd.getTime()));
+      while (cur <= end){
+        const key = ymd(cur);
+        vacDays.set(key, v.color || '#B3A29B');
+        push(key, v.color || '#B3A29B');
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+  }
+  state.monthDayColors = map;
+  state.vacationDaysInMonth = vacDays;
+}
+
+/** Se asigură că luna cerută e cache-uită, apoi randează instant. Face o
+ * cerere de rețea DOAR dacă luna e în afara intervalului deja descărcat. */
+async function loadMonthDots(){
+  if (state.employee){
+    const y = state.calendarMonth.getFullYear();
+    const m = state.calendarMonth.getMonth();
+    const from = new Date(y, m, 1);
+    const to = new Date(y, m + 1, 0, 23, 59, 59, 999);
+    if (!cacheRangeCovers(from, to)){
+      try { await ensureRangeCached(from, to); } catch (e){ /* offline — folosim ce avem local */ }
+    }
+  }
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+}
+
+/* ====================== RENDER: DAY AGENDA ====================== */
+/** Filtrează ziua selectată direct din cache și randează instant, fără spinner
+ * și fără nicio cerere de rețea — cu excepția rarului caz în care ziua cade
+ * în afara ferestrei de 3 luni deja cache-uite. */
+async function loadDay(){
+  const content = document.getElementById('dayContent');
+  if (!state.employee){
+    content.innerHTML = `<div class="day-state">Nu există nicio angajată configurată în Supabase.</div>`;
+    return;
+  }
+  const dayStart = new Date(state.selectedDay.getFullYear(), state.selectedDay.getMonth(), state.selectedDay.getDate());
+  const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+  if (!cacheRangeCovers(dayStart, dayEnd)){
+    content.innerHTML = `<div class="spinner"></div>`;
+    try { await ensureRangeCached(dayStart, dayEnd); }
+    catch (e){
+      if (!isNetworkError(e)) { content.innerHTML = `<div class="day-state">Eroare la încărcare: ${escapeHtml(e.message || String(e))}</div>`; return; }
+      showToast('Fără conexiune — se afișează doar datele salvate local.', 'warning', { autoHide: 3200 });
+    }
+  }
+  renderDayFromCache();
+}
+
+/** Randare sincronă (0ms) a agendei zilei selectate, din cache. */
+function renderDayFromCache(){
+  if (!state.employee) return;
+  const vac = findVacationForDay(state.selectedDay);
+  const appts = cache.appointments.filter(a => a.employeeId === state.employee.id && isSameDay(a.startTime, state.selectedDay));
+  const blocks = cache.jobBlocks.filter(b => b.employeeId === state.employee.id && isSameDay(b.start, state.selectedDay));
+  state.appointments = appts;
+  state.dayJobBlocks = blocks;
+  renderAppointmentList(vac);
+}
+
+function renderAppointmentList(vac){
+  const content = document.getElementById('dayContent');
+  const items = [
+    ...state.appointments.map(a => ({ type: 'appt', start: a.startTime, data: a })),
+    ...state.dayJobBlocks.map(b => ({ type: 'block', start: b.start, data: b })),
+  ].sort((a, b) => a.start - b.start);
+
+  const vacationCardHtml = vac ? `
+    <div class="vacation-card">
+      <div class="vacation-card-icon">🏖️</div>
+      <div>
+        <div class="vacation-card-title">CONCEDIU</div>
+        <div class="vacation-card-desc">${escapeHtml(vac.description || 'Zi liberă')}</div>
+      </div>
+    </div>
+  ` : '';
+
+  if (items.length === 0){
+    content.innerHTML = vacationCardHtml + `<div class="day-state">${vac ? 'Nicio programare — zi de concediu.' : 'Nicio programare în această zi.<br/>Apasă „Programare nouă” ca să adaugi una.'}</div>`;
+    return;
+  }
+
+  content.innerHTML = vacationCardHtml + items.map((item, idx) => {
+    if (item.type === 'block'){
+      const b = item.data;
+      return `
+        <div class="block-card">
+          <div class="block-time">${fmtTime(b.start)}<small>${fmtTime(b.end)}</small></div>
+          <div class="block-body">
+            <div class="block-label">${escapeHtml(b.label)}</div>
+            <div class="block-sub">Ocupată — administrează din Setări → Programul de la celălalt job</div>
+          </div>
+        </div>
+      `;
+    }
+    const a = item.data;
+    const cancelled = a.status === 'cancelled';
+    const completed = a.status === 'completed';
+    const unconfirmed = a.status === 'unconfirmed';
+    const color = cancelled ? 'var(--muted)' : a.serviceColor;
+    return `
+      <div class="appt-card ${cancelled ? 'cancelled' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
+        <div class="appt-time">${fmtTime(a.startTime)}<small>${fmtTime(a.endTime)}</small></div>
+        <div class="appt-body">
+          <div class="appt-client">${escapeHtml(a.clientName || 'Client')}</div>
+          <div class="appt-service"><span class="swatch" style="background:${color}"></span>${escapeHtml(a.serviceName || '')}</div>
+          ${cancelled ? `<span class="appt-tag">Anulată</span>` : ''}
+          ${completed ? `<span class="appt-tag" style="background:var(--success)">Finalizată</span>` : ''}
+          ${unconfirmed ? `<span class="appt-tag" style="background:var(--warn)">Neconfirmată</span>` : ''}
+          ${a.pendingOffline ? `<span class="appt-tag pending-tag">Offline — în așteptare</span>` : ''}
+        </div>
+        ${(!cancelled && !a.pendingOffline) ? reminderActionsHtml(a) : ''}
+        ${(!cancelled && !a.pendingOffline) ? `
+          <button class="appt-cancel" data-id="${a.id}" title="Anulează programarea">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  // click pe card -> editare (exceptând blocurile și programările încă nesincronizate)
+  content.querySelectorAll('.appt-card').forEach(card => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('.appt-cancel')) return;
+      if (ev.target.closest('.reminder-actions')) return;
+      if (card.dataset.pending === '1') { showToast('Se poate edita după ce se sincronizează.', 'info', { autoHide: 2000 }); return; }
+      const idx = Number(card.dataset.apptIdx);
+      const apptItems = [
+        ...state.appointments.map(a => ({ type: 'appt', start: a.startTime, data: a })),
+        ...state.dayJobBlocks.map(b => ({ type: 'block', start: b.start, data: b })),
+      ].sort((a, b) => a.start - b.start);
+      const target = apptItems[idx];
+      if (target && target.type === 'appt') openEditModal(target.data);
+    });
+  });
+
+  content.querySelectorAll('.appt-cancel').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      cancelAppointmentOptimistic(btn.dataset.id);
+    });
+  });
+
+  wireReminderCopyButtons(content);
+
+  // Blocurile de la celălalt job se șterg doar din Setări (nu din agendă).
+}
+
+/** Anulare optimistă: actualizează cache-ul + UI-ul instant (0ms), apoi
+ * trimite cererea către Supabase în fundal. La eroare, revine la starea
+ * anterioară și anunță utilizatorul. */
+async function cancelAppointmentOptimistic(id){
+  if (!confirm('Sigur anulezi această programare?')) return;
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  const previous = idx >= 0 ? { ...cache.appointments[idx] } : null;
+  if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'cancelled' };
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+
+  const toastId = showToast('Se anulează…', 'saving', { persist: true });
+  try {
+    await cancelAppointment(id);
+    updateToast(toastId, 'Programare anulată.', 'success', 1800);
+    refreshUnconfirmedBadge();
+  } catch (e){
+    if (idx >= 0 && previous) cache.appointments[idx] = previous;
+    renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
+    updateToast(toastId, 'Eroare la anulare — s-a revenit la starea anterioară: ' + (e.message || e), 'error', 3600);
+  }
+}
+
+/* ====================== CLIENT PICKER (reutilizat în Add & Edit) ====================== */
+const pickerHandlers = {};
+
+function clientPickerHtml(prefix){
+  return `
+    <div class="field">
+      <label>Clientă</label>
+      <div class="client-selected hidden" id="${prefix}ClientSelected"></div>
+      <div id="${prefix}ClientSearchWrap">
+        <input type="text" class="client-search-input" id="${prefix}ClientSearch" placeholder="Caută după nume sau telefon…" />
+        <div class="client-list" id="${prefix}ClientList"></div>
+      </div>
+    </div>
+    <button class="link-btn" id="${prefix}ToggleNewClient">+ Clientă nouă</button>
+    <div class="new-client-box hidden" id="${prefix}NewClientBox">
+      <div class="field"><label>Nume</label><input id="${prefix}NewClientName" type="text" /></div>
+      <div class="field"><label>Telefon</label><input id="${prefix}NewClientPhone" type="tel" /></div>
+      <button class="btn-secondary" id="${prefix}SaveNewClient">Adaugă clienta</button>
+    </div>
+  `;
+}
+
+function renderClientList(prefix, query, onSelect){
+  const listEl = document.getElementById(`${prefix}ClientList`);
+  if (!listEl) return;
+  const q = (query || '').trim().toLowerCase();
+  const filtered = !q ? state.clients : state.clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q));
+  if (filtered.length === 0){
+    listEl.innerHTML = `<div class="client-empty">Nicio clientă găsită.</div>`;
+    return;
+  }
+  listEl.innerHTML = filtered.slice(0, 30).map(c => `
+    <button type="button" class="client-row" data-id="${c.id}">
+      <span class="client-avatar">${escapeHtml(initials(c.name))}</span>
+      <span class="client-row-info">
+        <span class="client-row-name">${escapeHtml(c.name)}${c.pendingOffline ? '<em>offline</em>' : ''}</span>
+        ${c.phone ? `<span class="client-row-phone">${escapeHtml(c.phone)}</span>` : ''}
+      </span>
+    </button>
+  `).join('');
+  listEl.querySelectorAll('.client-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const client = state.clients.find(c => c.id === row.dataset.id);
+      onSelect(client);
+    });
+  });
+}
+
+function showSelectedClient(prefix, client, onChangeClick){
+  const selEl = document.getElementById(`${prefix}ClientSelected`);
+  const searchWrap = document.getElementById(`${prefix}ClientSearchWrap`);
+  if (!selEl || !searchWrap) return;
+  if (!client){
+    selEl.classList.add('hidden');
+    searchWrap.classList.remove('hidden');
+    return;
+  }
+  selEl.classList.remove('hidden');
+  searchWrap.classList.add('hidden');
+  selEl.innerHTML = `
+    <span class="client-avatar">${escapeHtml(initials(client.name))}</span>
+    <span class="client-row-info">
+      <span class="client-row-name">${escapeHtml(client.name)}${client.pendingOffline ? '<em>offline</em>' : ''}</span>
+      ${client.phone ? `<span class="client-row-phone">${escapeHtml(client.phone)}</span>` : ''}
+    </span>
+    <button type="button" class="btn-outline client-change-btn">Schimbă</button>
+  `;
+  selEl.querySelector('.client-change-btn').addEventListener('click', onChangeClick);
+}
+
+/** opts: { get: ()=>client|null, set: (client)=>void, onChange: ()=>void } */
+function wireClientPicker(prefix, opts){
+  const searchInput = document.getElementById(`${prefix}ClientSearch`);
+  function selectHandler(client){
+    opts.set(client);
+    showSelectedClient(prefix, client, () => {
+      opts.set(null);
+      showSelectedClient(prefix, null);
+      searchInput.value = '';
+      renderClientList(prefix, '', selectHandler);
+      searchInput.focus();
+    });
+    opts.onChange();
+  }
+  pickerHandlers[prefix] = selectHandler;
+  searchInput.addEventListener('input', () => renderClientList(prefix, searchInput.value, selectHandler));
+  renderClientList(prefix, '', selectHandler);
+
+  const current = opts.get();
+  if (current) showSelectedClient(prefix, current, () => {
+    opts.set(null); showSelectedClient(prefix, null); searchInput.value = ''; renderClientList(prefix, '', selectHandler);
+  });
+  else showSelectedClient(prefix, null);
+}
+
+function resetClientPickerUI(prefix){
+  const search = document.getElementById(`${prefix}ClientSearch`);
+  if (search) search.value = '';
+  showSelectedClient(prefix, null);
+  if (pickerHandlers[prefix]) renderClientList(prefix, '', pickerHandlers[prefix]);
+}
+
+/** opts: { onCreated: (client)=>void } */
+function wireNewClientBox(prefix, opts){
+  document.getElementById(`${prefix}ToggleNewClient`).addEventListener('click', () => {
+    document.getElementById(`${prefix}NewClientBox`).classList.toggle('hidden');
+  });
+  document.getElementById(`${prefix}SaveNewClient`).addEventListener('click', async () => {
+    const name = document.getElementById(`${prefix}NewClientName`).value.trim();
+    const phone = document.getElementById(`${prefix}NewClientPhone`).value.trim();
+    if (!name) return;
+    const btn = document.getElementById(`${prefix}SaveNewClient`);
+    btn.disabled = true; btn.textContent = 'Se adaugă…';
+    const toastId = showToast('Se salvează clienta…', 'saving', { persist: true });
+    try {
+      const result = await createClientSmart(name, phone);
+      updateToast(toastId, result.offline ? 'Fără conexiune — clienta a fost salvată local.' : 'Clientă adăugată.', result.offline ? 'warning' : 'success', 2400);
+      document.getElementById(`${prefix}NewClientBox`).classList.add('hidden');
+      document.getElementById(`${prefix}NewClientName`).value = '';
+      document.getElementById(`${prefix}NewClientPhone`).value = '';
+      if (pickerHandlers[prefix]) pickerHandlers[prefix](result.client);
+      opts.onCreated(result.client);
+    } catch (e){
+      updateToast(toastId, 'Eroare: ' + (e.message || e), 'error', 3000);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Adaugă clienta';
+    }
+  });
+}
+
+/* ====================== SETTINGS SCREEN ====================== */
+const settingsState = { weekStart: mondayOf(new Date()) };
+const statsState = { month: new Date(new Date().getFullYear(), new Date().getMonth(), 1) };
+
+async function renderSettingsScreen(){
+  settingsState.weekStart = mondayOf(new Date());
+  statsState.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  root.innerHTML = `
+    <div id="app">
+      <header class="top">
+        <div class="back-row">
+          <button class="icon-btn" id="backBtn" title="Înapoi">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="brand-title">Setări</div>
+        </div>
+      </header>
+      <div style="padding:18px;">
+
+        <section class="panel settings-section">
+          <h2>Statistici &amp; Venituri</h2>
+          <div class="week-nav">
+            <button class="btn-outline" id="statsPrevBtn">‹</button>
+            <span class="week-range" id="statsMonthLabel"></span>
+            <button class="btn-outline" id="statsNextBtn">›</button>
+          </div>
+          <div id="statsBody"><div class="spinner"></div></div>
+        </section>
+
+        <section class="panel settings-section">
+          <h2>Programul de la celălalt job</h2>
+          <p class="settings-hint">Orele în care lucrezi în altă parte, în săptămâna aleasă — restul timpului (în intervalul de mai jos) rămâne disponibil pentru programări la unghii.</p>
+          <div class="week-nav">
+            <button class="btn-outline" id="prevWeekBtn">‹ Săpt. trecută</button>
+            <span class="week-range" id="weekRangeLabel"></span>
+            <button class="btn-outline" id="nextWeekBtn">Săpt. viitoare ›</button>
+          </div>
+          <div id="weekRows"></div>
+          <p class="error-text hidden" id="weekError"></p>
+          <p class="success-text hidden" id="weekSuccess"></p>
+          <button class="btn-primary" id="saveWeekBtn" style="margin-top:12px;">Salvează programul săptămânii</button>
+        </section>
+
+        <section class="panel settings-section">
+          <details id="hoursDetails">
+            <summary class="hours-summary">
+              <h2 style="display:inline;">Interval orar pentru unghii</h2>
+              <span class="hours-summary-toggle">Afișează / Editează interval orar</span>
+            </summary>
+            <div class="hours-details-body">
+              <p class="settings-hint">De la ce oră până la ce oră poți face programări, în fiecare zi a săptămânii.</p>
+              <div id="hoursSetupNote"></div>
+              <div id="hoursRows"></div>
+              <p class="error-text hidden" id="hoursError"></p>
+              <p class="success-text hidden" id="hoursSuccess"></p>
+              <button class="btn-primary" id="saveHoursBtn" style="margin-top:12px;">Salvează intervalul orar</button>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel settings-section">
+          <h2>Concedii &amp; Zile Libere</h2>
+          <p class="settings-hint">Zilele în care nu lucrezi deloc — apar în calendar și blochează programările noi.</p>
+          <div id="vacationsSetupNote"></div>
+          <div class="service-form-row">
+            <div class="field"><label for="vacStart">Data început</label><input id="vacStart" type="date" /></div>
+            <div class="field"><label for="vacEnd">Data sfârșit</label><input id="vacEnd" type="date" /></div>
+          </div>
+          <div class="field"><label for="vacDesc">Descriere</label><input id="vacDesc" type="text" placeholder="ex: Vacanță vară" /></div>
+          <div class="field">
+            <label>Culoare</label>
+            <div class="color-row">
+              <input type="color" id="vacColor" value="#B3A29B" />
+              <div class="preset-swatches" id="vacPresetSwatches">
+                ${VACATION_PRESET_COLORS.map(c => `<span class="preset-swatch" data-color="${c}" style="background:${c}"></span>`).join('')}
+              </div>
+            </div>
+          </div>
+          <p class="error-text hidden" id="vacError"></p>
+          <p class="success-text hidden" id="vacSuccess"></p>
+          <button class="btn-primary" id="saveVacBtn" style="margin-bottom:16px;">Adaugă concediul</button>
+          <div id="vacationsList"></div>
+        </section>
+
+        <section class="panel settings-section">
+          <h2>Modele &amp; servicii</h2>
+          <p class="settings-hint" style="margin-bottom:12px;">Adăugarea de servicii/modele noi s-a mutat în pagina dedicată „Modele”.</p>
+          <button class="btn-outline" id="goModelsFromSettings">Deschide pagina Modele →</button>
+        </section>
+
+      </div>
+    </div>
+  `;
+
+  document.getElementById('backBtn').addEventListener('click', goCalendar);
+  document.getElementById('goModelsFromSettings').addEventListener('click', goModels);
+  document.getElementById('prevWeekBtn').addEventListener('click', () => changeSettingsWeek(-1));
+  document.getElementById('nextWeekBtn').addEventListener('click', () => changeSettingsWeek(1));
+  document.getElementById('saveHoursBtn').addEventListener('click', saveHours);
+  document.getElementById('saveWeekBtn').addEventListener('click', saveWeek);
+  document.getElementById('statsPrevBtn').addEventListener('click', () => changeStatsMonth(-1));
+  document.getElementById('statsNextBtn').addEventListener('click', () => changeStatsMonth(1));
+  document.getElementById('saveVacBtn').addEventListener('click', saveNewVacation);
+  document.querySelectorAll('#vacPresetSwatches .preset-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.getElementById('vacColor').value = sw.dataset.color;
+      document.querySelectorAll('#vacPresetSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+    });
+  });
+
+  renderHoursRows();
+  await loadWeekRows();
+  await loadStats();
+  await loadVacationsSection();
+}
+
+/* ---------- Concedii ---------- */
+async function loadVacationsSection(){
+  const note = document.getElementById('vacationsSetupNote');
+  const list = document.getElementById('vacationsList');
+  const saveBtn = document.getElementById('saveVacBtn');
+  if (!state.employee){ list.innerHTML = ''; return; }
+  list.innerHTML = `<div class="spinner"></div>`;
+  let res;
+  try { res = await getVacations(state.employee.id); }
+  catch (e){ list.innerHTML = `<p class="error-text">Eroare la încărcarea concediilor: ${escapeHtml(e.message || e)}</p>`; return; }
+  state.vacationsMissingTable = res.missingTable;
+  note.innerHTML = res.missingTable ? `
+    <div class="setup-note">
+      Tabelul pentru concedii nu există încă în Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici.
+      <pre>${escapeHtml(VACATIONS_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyVacSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  ` : '';
+  saveBtn.disabled = res.missingTable;
+  if (res.missingTable){
+    document.getElementById('copyVacSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(VACATIONS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
+  cache.vacations = res.list;
+  renderVacationsList();
+}
+
+function renderVacationsList(){
+  const list = document.getElementById('vacationsList');
+  if (!list) return;
+  if (cache.vacations.length === 0){ list.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun concediu adăugat încă.</p>`; return; }
+  const sorted = [...cache.vacations].sort((a, b) => b.start - a.start);
+  list.innerHTML = sorted.map(v => `
+    <div class="history-row">
+      <span class="history-date">${fmtDateShort(v.start)} – ${fmtDateShort(v.end)}</span>
+      <span class="history-mid"><span style="width:9px;height:9px;border-radius:50%;display:inline-block;background:${v.color};flex:none;"></span>${escapeHtml(v.description || 'Zi liberă')}</span>
+      <button type="button" class="appt-cancel" data-id="${v.id}" title="Șterge concediul" style="width:28px;height:28px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `).join('');
+  list.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Ștergi acest concediu?')) return;
+      const id = btn.dataset.id;
+      const prevList = [...cache.vacations];
+      cache.vacations = cache.vacations.filter(v => v.id !== id);
+      renderVacationsList();
+      computeMonthDayColorsFromCache(); renderCalendar();
+      try {
+        await deleteVacation(id);
+        showToast('Concediu șters.', 'success', { autoHide: 1800 });
+      } catch (e){
+        cache.vacations = prevList;
+        renderVacationsList();
+        computeMonthDayColorsFromCache(); renderCalendar();
+        showToast('Eroare la ștergere: ' + (e.message || e), 'error', { autoHide: 3000 });
+      }
+    });
+  });
+}
+
+async function saveNewVacation(){
+  const btn = document.getElementById('saveVacBtn');
+  const errEl = document.getElementById('vacError');
+  const okEl = document.getElementById('vacSuccess');
+  errEl.classList.add('hidden'); okEl.classList.add('hidden');
+  const startVal = document.getElementById('vacStart').value;
+  const endVal = document.getElementById('vacEnd').value;
+  const desc = document.getElementById('vacDesc').value.trim();
+  const color = document.getElementById('vacColor').value || '#B3A29B';
+  if (!startVal || !endVal){ errEl.textContent = 'Alege data de început și sfârșit.'; errEl.classList.remove('hidden'); return; }
+  if (endVal < startVal){ errEl.textContent = 'Data de sfârșit trebuie să fie după data de început.'; errEl.classList.remove('hidden'); return; }
+
+  btn.disabled = true; btn.textContent = 'Se adaugă…';
+  const toastId = showToast('Se salvează concediul…', 'saving', { persist: true });
+  try {
+    const row = await addVacation({ employeeId: state.employee.id, startDate: startVal, endDate: endVal, description: desc, color });
+    cache.vacations.push({
+      id: row.id, employeeId: row.employee_id,
+      start: new Date(row.start_date + 'T00:00:00'), end: new Date(row.end_date + 'T00:00:00'),
+      description: row.description || '', color: row.color || color,
+    });
+    document.getElementById('vacStart').value = '';
+    document.getElementById('vacEnd').value = '';
+    document.getElementById('vacDesc').value = '';
+    document.querySelectorAll('#vacPresetSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
+    renderVacationsList();
+    computeMonthDayColorsFromCache(); renderCalendar();
+    okEl.textContent = 'Concediu adăugat.'; okEl.classList.remove('hidden');
+    updateToast(toastId, 'Concediu adăugat.', 'success', 1800);
+  } catch (e){
+    errEl.textContent = 'Eroare la adăugare: ' + (e.message || e); errEl.classList.remove('hidden');
+    updateToast(toastId, 'Eroare la adăugare.', 'error', 2600);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Adaugă concediul';
+  }
+}
+
+/* ====================== PAGINA „MODELE” (#/models) ====================== */
+async function renderModelsScreen(){
+  root.innerHTML = `
+    <div id="app">
+      <header class="top">
+        <div class="back-row">
+          <button class="icon-btn" id="backBtn" title="Înapoi">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="brand-title">Modele</div>
+        </div>
+      </header>
+      <div style="padding:18px;">
+        <section class="panel settings-section">
+          <h2>Servicii</h2>
+          <p class="settings-hint">Serviciile disponibile și culoarea lor pe calendar. Adaugă unul nou mai jos.</p>
+          <button type="button" class="btn-outline" id="showClientGalleryBtn" style="margin-bottom:14px;">📷 Arată Galerie Clientă</button>
+          <div class="tag-pills" id="tagPillsWrap"></div>
+          <div id="servicesSetupNote"></div>
+          <div id="servicesList"></div>
+          <div style="height:6px;"></div>
+          <div class="field">
+            <label for="svcName">Nume serviciu</label>
+            <input id="svcName" type="text" placeholder="ex: Manichiură clasică" />
+          </div>
+          <div class="service-form-row">
+            <div class="field">
+              <label for="svcDuration">Durată (minute)</label>
+              <input id="svcDuration" type="number" min="5" step="5" value="60" />
+            </div>
+            <div class="field">
+              <label for="svcPrice">Preț (lei)</label>
+              <input id="svcPrice" type="number" min="0" step="1" value="100" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Culoare</label>
+            <div class="color-row">
+              <input type="color" id="svcColor" value="${DEFAULT_SERVICE_COLOR}" />
+              <div class="preset-swatches" id="presetSwatches">
+                ${PRESET_COLORS.map(c => `<span class="preset-swatch" data-color="${c}" style="background:${c}"></span>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div id="svcMediaSetupNote"></div>
+          <div id="svcGallerySetupNote"></div>
+          <div class="field">
+            <label for="svcImages">Poze model (un URL pe linie sau separate prin virgulă)</label>
+            <textarea id="svcImages" rows="3" placeholder="https://…&#10;https://…"></textarea>
+          </div>
+          <div class="field">
+            <label for="svcTags">Hashtag-uri (separate prin virgulă)</label>
+            <input id="svcTags" type="text" placeholder="french, gel, babyboomer, lungi, sclipici" />
+          </div>
+          <div class="field">
+            <label for="svcDescription">Descriere model</label>
+            <textarea id="svcDescription" rows="3" placeholder="Tehnică, materiale, detalii pentru clientă…"></textarea>
+          </div>
+          <p class="error-text hidden" id="svcError"></p>
+          <p class="success-text hidden" id="svcSuccess"></p>
+          <button class="btn-primary" id="saveSvcBtn">Adaugă serviciul</button>
+        </section>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('backBtn').addEventListener('click', goCalendar);
+  document.getElementById('saveSvcBtn').addEventListener('click', saveNewService);
+  document.getElementById('showClientGalleryBtn').addEventListener('click', openClientGalleryModal);
+  document.querySelectorAll('#presetSwatches .preset-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.getElementById('svcColor').value = sw.dataset.color;
+      document.querySelectorAll('#presetSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+    });
+  });
+
+  await loadServicesSection();
+}
+
+/* ====================== PAGINA „CLIENTE” (#/clients) ====================== */
+async function renderClientsScreen(){
+  root.innerHTML = `
+    <div id="app">
+      <header class="top">
+        <div class="back-row">
+          <button class="icon-btn" id="backBtn" title="Înapoi">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="brand-title">Cliente</div>
+        </div>
+      </header>
+      <div style="padding:18px;">
+        <section class="panel settings-section" style="margin-bottom:0;">
+          <input type="text" class="client-search-input" id="browseClientSearch" placeholder="Caută după nume sau telefon…" />
+          <div class="client-list" id="browseClientList" style="max-height:none;"></div>
+        </section>
+      </div>
+    </div>
+  `;
+  document.getElementById('backBtn').addEventListener('click', goCalendar);
+
+  const listEl = document.getElementById('browseClientList');
+  listEl.innerHTML = `<div class="spinner"></div>`;
+  try {
+    if (navigator.onLine) state.clients = await getClients();
+  } catch (e){ /* folosim ce avem local dacă e offline */ }
+
+  const searchInput = document.getElementById('browseClientSearch');
+  searchInput.addEventListener('input', () => renderClientList('browse', searchInput.value, openClientDetail));
+  renderClientList('browse', '', openClientDetail);
+}
+
+/* ---------- Modal detaliu clientă + istoric programări ---------- */
+function ensureClientDetailModal(){
+  if (document.getElementById('clientDetailModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="clientDetailModal">
+      <div class="sheet-header">
+        <div class="sheet-title" id="clientDetailName">Clientă</div>
+        <button class="icon-btn" id="closeClientDetailModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <p class="settings-hint" id="clientDetailPhone" style="margin-bottom:14px;"></p>
+        <h2 style="font-family:var(--font-display); font-weight:600; font-size:15px; margin:0 0 8px 0;">Istoric programări</h2>
+        <div id="clientHistoryList"><div class="spinner"></div></div>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('clientDetailModal'));
+  document.getElementById('closeClientDetailModal').addEventListener('click', () => document.getElementById('clientDetailModal').close());
+}
+
+async function getClientHistory(clientId){
+  const { data, error } = await sb.from('appointments')
+    .select('start_time, end_time, status, services(name, price)')
+    .eq('client_id', clientId)
+    .order('start_time', { ascending: false });
+  if (error) throw error;
+  return data.map(r => ({
+    startTime: new Date(r.start_time),
+    endTime: new Date(r.end_time),
+    status: r.status,
+    serviceName: r.services ? r.services.name : '—',
+    price: r.services ? Number(r.services.price) || 0 : 0,
+  }));
+}
+
+const STATUS_LABELS_RO = { confirmed: 'Confirmată', unconfirmed: 'Neconfirmată', completed: 'Finalizată', cancelled: 'Anulată' };
+
+async function openClientDetail(client){
+  ensureClientDetailModal();
+  document.getElementById('clientDetailName').textContent = client.name;
+  document.getElementById('clientDetailPhone').textContent = client.phone ? `Telefon: ${client.phone}` : 'Fără telefon salvat';
+  const histEl = document.getElementById('clientHistoryList');
+  histEl.innerHTML = `<div class="spinner"></div>`;
+  document.getElementById('clientDetailModal').showModal();
+
+  if (String(client.id).startsWith('offline-client')){
+    histEl.innerHTML = `<p class="settings-hint" style="margin:0;">Clienta încă nu s-a sincronizat — istoricul va fi disponibil după conectare.</p>`;
+    return;
+  }
+  try {
+    const history = await getClientHistory(client.id);
+    if (history.length === 0){
+      histEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio programare încă.</p>`;
+      return;
+    }
+    histEl.innerHTML = history.map(h => `
+      <div class="history-row">
+        <span class="history-date">${fmtDateShort(h.startTime)}, ${fmtTime(h.startTime)}</span>
+        <span class="history-mid">${escapeHtml(h.serviceName)}<span class="history-status" style="background:${h.status === 'cancelled' ? 'var(--muted)' : h.status === 'completed' ? 'var(--success)' : h.status === 'unconfirmed' ? 'var(--warn)' : 'var(--accent)'}">${STATUS_LABELS_RO[h.status] || h.status}</span></span>
+        <span class="history-price">${h.price} lei</span>
+      </div>
+    `).join('');
+  } catch (e){
+    histEl.innerHTML = `<p class="error-text">${isNetworkError(e) ? 'Fără conexiune — istoricul nu poate fi încărcat acum.' : 'Eroare: ' + escapeHtml(e.message || e)}</p>`;
+  }
+}
+
+/* ====================== PROGRAMĂRI NECONFIRMATE ====================== */
+async function setAppointmentStatus(id, status){
+  const { error } = await sb.from('appointments').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
+async function refreshUnconfirmedBadge(){
+  const badge = document.getElementById('unconfirmedBadge');
+  if (!badge || !state.employee) return;
+  try {
+    const { count, error } = await sb.from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('employee_id', state.employee.id)
+      .eq('status', 'unconfirmed');
+    if (error) throw error;
+    if (count && count > 0){
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  } catch (e){ /* offline sau eroare - lăsăm badge-ul cum era */ }
+}
+
+function ensureUnconfirmedModal(){
+  if (document.getElementById('unconfirmedModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="unconfirmedModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Programări neconfirmate</div>
+        <button class="icon-btn" id="closeUnconfirmedModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div id="unconfirmedList"><div class="spinner"></div></div>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('unconfirmedModal'));
+  document.getElementById('closeUnconfirmedModal').addEventListener('click', () => document.getElementById('unconfirmedModal').close());
+}
+
+async function openUnconfirmedModal(){
+  ensureUnconfirmedModal();
+  document.getElementById('unconfirmedModal').showModal();
+  await loadUnconfirmedList();
+}
+
+async function loadUnconfirmedList(){
+  const listEl = document.getElementById('unconfirmedList');
+  listEl.innerHTML = `<div class="spinner"></div>`;
+  if (!state.employee){ listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio angajată configurată.</p>`; return; }
+  try {
+    const items = await getUnconfirmedAppointments(state.employee.id);
+    if (items.length === 0){
+      listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio programare neconfirmată.</p>`;
+      return;
+    }
+    listEl.innerHTML = items.map(a => `
+      <div class="unconf-card" data-id="${a.id}">
+        <div class="unconf-top">
+          <div class="unconf-client">${escapeHtml(a.clientName || 'Client')}</div>
+          <div class="unconf-meta">${escapeHtml(a.serviceName || '')} · ${fmtDateHeader(a.startTime)}, ${fmtTime(a.startTime)} - ${fmtTime(a.endTime)}</div>
+        </div>
+        ${reminderActionsHtml(a)}
+        <div class="unconf-actions">
+          <button type="button" class="btn-confirm" data-action="confirm">Confirmă</button>
+          <button type="button" class="btn-decline" data-action="decline">Anulează</button>
+        </div>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('.unconf-card').forEach(card => {
+      const id = card.dataset.id;
+      card.querySelector('[data-action="confirm"]').addEventListener('click', () => handleUnconfirmedAction(id, 'confirmed', card));
+      card.querySelector('[data-action="decline"]').addEventListener('click', () => handleUnconfirmedAction(id, 'cancelled', card));
+    });
+    wireReminderCopyButtons(listEl);
+  } catch (e){
+    listEl.innerHTML = `<p class="error-text">${isNetworkError(e) ? 'Fără conexiune — lista nu poate fi încărcată acum.' : 'Eroare: ' + escapeHtml(e.message || e)}</p>`;
+  }
+}
+
+async function handleUnconfirmedAction(id, newStatus, cardEl){
+  const buttons = cardEl.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+  const toastId = showToast(newStatus === 'confirmed' ? 'Se confirmă…' : 'Se anulează…', 'saving', { persist: true });
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  try {
+    await setAppointmentStatus(id, newStatus);
+    if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: newStatus };
+    cardEl.remove();
+    updateToast(toastId, newStatus === 'confirmed' ? 'Programare confirmată.' : 'Programare anulată.', 'success', 1800);
+    if (!document.querySelector('#unconfirmedList .unconf-card')){
+      document.getElementById('unconfirmedList').innerHTML = `<p class="settings-hint" style="margin:0;">Nicio programare neconfirmată.</p>`;
+    }
+    refreshUnconfirmedBadge();
+    renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
+  } catch (e){
+    buttons.forEach(b => b.disabled = false);
+    updateToast(toastId, 'Eroare: ' + (e.message || e), 'error', 3000);
+  }
+}
+
+function renderHoursRows(){
+  const note = document.getElementById('hoursSetupNote');
+  note.innerHTML = state.weekdayHoursMissingTable ? `
+    <div class="setup-note">
+      Tabelul pentru intervalul orar nu există încă în Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici — până atunci se folosește implicit 08:00–22:00.
+      <pre>${escapeHtml(WEEKDAY_HOURS_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyHoursSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  ` : '';
+  if (state.weekdayHoursMissingTable){
+    document.getElementById('copyHoursSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(WEEKDAY_HOURS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
+  const wrap = document.getElementById('hoursRows');
+  wrap.innerHTML = DAYS_MON_FIRST.map(({ jsDay, label }) => {
+    const cfg = state.weekdayHours[jsDay] || { startMin: 8*60, endMin: 22*60 };
+    return `
+      <div class="wd-row">
+        <div class="wd-label">${label}</div>
+        <div class="wd-times">
+          <input type="time" class="time-input" data-jsday="${jsDay}" data-role="start" value="${minutesToHHMM(cfg.startMin)}" />
+          <span class="wd-sep">–</span>
+          <input type="time" class="time-input" data-jsday="${jsDay}" data-role="end" value="${minutesToHHMM(cfg.endMin)}" />
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function saveHours(){
+  const btn = document.getElementById('saveHoursBtn');
+  const errEl = document.getElementById('hoursError');
+  const okEl = document.getElementById('hoursSuccess');
+  errEl.classList.add('hidden'); okEl.classList.add('hidden');
+  const rows = DAYS_MON_FIRST.map(({ jsDay }) => {
+    const s = document.querySelector(`.time-input[data-jsday="${jsDay}"][data-role="start"]`);
+    const e = document.querySelector(`.time-input[data-jsday="${jsDay}"][data-role="end"]`);
+    return { weekday: jsDay, startMin: hhmmToMinutes(s.value || '08:00'), endMin: hhmmToMinutes(e.value || '22:00') };
+  });
+  const bad = rows.find(r => r.endMin <= r.startMin);
+  if (bad){ errEl.textContent = 'Ora de sfârșit trebuie să fie după ora de început, pentru fiecare zi.'; errEl.classList.remove('hidden'); return; }
+
+  const toastId = showToast('Se salvează…', 'saving', { persist: true });
+  btn.disabled = true; btn.textContent = 'Se salvează…';
+  try {
+    await saveWeekdayHours(state.employee.id, rows);
+    rows.forEach(r => { state.weekdayHours[r.weekday] = { startMin: r.startMin, endMin: r.endMin }; });
+    state.weekdayHoursMissingTable = false;
+    renderHoursRows();
+    okEl.textContent = 'Salvat.'; okEl.classList.remove('hidden');
+    updateToast(toastId, 'Interval orar salvat.', 'success', 1800);
+  } catch (e){
+    errEl.textContent = 'Eroare la salvare: ' + (e.message || e); errEl.classList.remove('hidden');
+    updateToast(toastId, 'Eroare la salvare.', 'error', 2600);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvează intervalul orar';
+  }
+}
+
+function changeSettingsWeek(delta){
+  const d = new Date(settingsState.weekStart);
+  d.setDate(d.getDate() + delta * 7);
+  settingsState.weekStart = d;
+  loadWeekRows();
+}
+
+async function loadWeekRows(){
+  const weekStart = settingsState.weekStart;
+  const weekEndLabel = new Date(weekStart); weekEndLabel.setDate(weekEndLabel.getDate() + 6);
+  document.getElementById('weekRangeLabel').textContent = `${fmtDateShort(weekStart)} – ${fmtDateShort(weekEndLabel)}`;
+  const wrap = document.getElementById('weekRows');
+  wrap.innerHTML = `<div class="spinner"></div>`;
+
+  let blocksByDate = {};
+  if (state.employee){
+    try {
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+      const blocks = await getMainJobBlocks({ employeeId: state.employee.id, from: weekStart, to: weekEnd });
+      blocks.forEach(b => {
+        const s = new Date(b.start_time);
+        const key = ymd(s);
+        if (!blocksByDate[key]) blocksByDate[key] = { start: s, end: new Date(b.end_time) };
+      });
+    } catch (e){ /* continuăm cu zile libere dacă nu găsim nimic */ }
+  }
+
+  wrap.innerHTML = DAYS_MON_FIRST.map(({ jsDay, label }, i) => {
+    const d = new Date(weekStart); d.setDate(d.getDate() + i);
+    const key = ymd(d);
+    const existing = blocksByDate[key];
+    const off = !existing;
+    return `
+      <div class="wd-row" data-date="${key}">
+        <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
+        <div class="wd-times">
+          <input type="time" class="time-input wk-start" value="${existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
+          <span class="wd-sep">–</span>
+          <input type="time" class="time-input wk-end" value="${existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
+        </div>
+        <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
+      </div>
+    `;
+  }).join('');
+
+  wrap.querySelectorAll('.wd-row').forEach(row => {
+    const offCb = row.querySelector('.wk-off');
+    const startInp = row.querySelector('.wk-start');
+    const endInp = row.querySelector('.wk-end');
+    offCb.addEventListener('change', () => {
+      startInp.disabled = offCb.checked; endInp.disabled = offCb.checked;
+      if (offCb.checked){ startInp.value = ''; endInp.value = ''; }
+    });
+  });
+}
+
+async function saveWeek(){
+  if (!state.employee) return;
+  const btn = document.getElementById('saveWeekBtn');
+  const errEl = document.getElementById('weekError');
+  const okEl = document.getElementById('weekSuccess');
+  errEl.classList.add('hidden'); okEl.classList.add('hidden');
+  const toastId = showToast('Se salvează…', 'saving', { persist: true });
+  btn.disabled = true; btn.textContent = 'Se salvează…';
+  const problems = [];
+  const rows = Array.from(document.querySelectorAll('#weekRows .wd-row'));
+
+  for (const row of rows){
+    const dateKey = row.dataset.date;
+    const [yy, mm, dd] = dateKey.split('-').map(Number);
+    const day = new Date(yy, mm - 1, dd);
+    const off = row.querySelector('.wk-off').checked;
+    const startVal = row.querySelector('.wk-start').value;
+    const endVal = row.querySelector('.wk-end').value;
+    try {
+      if (off || !startVal || !endVal){ await clearDayJobBlock(state.employee.id, day); continue; }
+      if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ problems.push(`${fmtDateShort(day)}: ora de sfârșit trebuie să fie după cea de început.`); continue; }
+      const dayStart = new Date(yy, mm - 1, dd, 0, 0);
+      const dayEnd = new Date(yy, mm - 1, dd, 23, 59);
+      const appts = await getAppointments({ employeeId: state.employee.id, from: dayStart, to: dayEnd });
+      const [sh, sm] = startVal.split(':').map(Number);
+      const [eh, em] = endVal.split(':').map(Number);
+      const blockStart = new Date(yy, mm - 1, dd, sh, sm);
+      const blockEnd = new Date(yy, mm - 1, dd, eh, em);
+      const conflict = appts.find(a => a.status !== 'cancelled' && a.startTime < blockEnd && a.endTime > blockStart);
+      if (conflict){ problems.push(`${fmtDateShort(day)}: ai deja o programare (${fmtTime(conflict.startTime)}) în acel interval — anuleaz-o sau alege alt interval.`); continue; }
+      await setDayJobBlock(state.employee.id, day, startVal, endVal);
+    } catch (e){ problems.push(`${fmtDateShort(day)}: ${e.message || e}`); }
+  }
+
+  btn.disabled = false; btn.textContent = 'Salvează programul săptămânii';
+  if (problems.length){
+    errEl.innerHTML = problems.map(p => escapeHtml(p)).join('<br/>'); errEl.classList.remove('hidden');
+    updateToast(toastId, 'Salvat parțial — vezi detaliile.', 'warning', 3000);
+  } else {
+    okEl.textContent = 'Salvat.'; okEl.classList.remove('hidden');
+    updateToast(toastId, 'Programul săptămânii a fost salvat.', 'success', 1800);
+  }
+  loadMonthDots();
+}
+
+/* ---------- Servicii / Modele ---------- */
+async function loadServicesSection(){
+  const note = document.getElementById('servicesSetupNote');
+  const mediaNote = document.getElementById('svcMediaSetupNote');
+  const galleryNote = document.getElementById('svcGallerySetupNote');
+  const list = document.getElementById('servicesList');
+  list.innerHTML = `<div class="spinner"></div>`;
+
+  const colorOk = await serviceColorColumnExists();
+  note.innerHTML = colorOk ? '' : `
+    <div class="setup-note">
+      Coloana de culoare nu există încă pe tabelul <code>services</code> din Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici ca să poți adăuga servicii cu culoare.
+      <pre>${escapeHtml(SERVICE_COLOR_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copySvcSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  `;
+  const saveBtn = document.getElementById('saveSvcBtn');
+  if (!colorOk){
+    document.getElementById('copySvcSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(SERVICE_COLOR_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+    saveBtn.disabled = true;
+  } else {
+    saveBtn.disabled = false;
+  }
+
+  const mediaOk = await serviceMediaColumnsExist();
+  state.serviceMediaColumnsOk = mediaOk;
+  mediaNote.innerHTML = mediaOk ? '' : `
+    <div class="setup-note">
+      Coloanele pentru poză și descriere nu există încă pe tabelul <code>services</code> din Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici ca să poți adăuga descriere modelelor.
+      <pre>${escapeHtml(SERVICE_MEDIA_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyMediaSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  `;
+  document.getElementById('svcDescription').disabled = !mediaOk;
+  if (!mediaOk){
+    document.getElementById('copyMediaSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(SERVICE_MEDIA_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
+
+  const galleryOk = await serviceGalleryColumnsExist();
+  state.serviceGalleryColumnsOk = galleryOk;
+  galleryNote.innerHTML = galleryOk ? '' : `
+    <div class="setup-note">
+      Coloanele pentru poze multiple și hashtag-uri nu există încă pe tabelul <code>services</code> din Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici ca să poți adăuga o galerie de poze și hashtag-uri modelelor.
+      <pre>${escapeHtml(SERVICE_GALLERY_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyGallerySqlBtn" type="button">Copiază SQL</button>
+    </div>
+  `;
+  document.getElementById('svcImages').disabled = !galleryOk;
+  document.getElementById('svcTags').disabled = !galleryOk;
+  if (!galleryOk){
+    document.getElementById('copyGallerySqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(SERVICE_GALLERY_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
+
+  try { state.services = await getServices(); }
+  catch (e){ list.innerHTML = `<p class="error-text">Eroare la încărcarea serviciilor: ${escapeHtml(e.message || e)}</p>`; return; }
+  modelsState.activeTag = 'Toate';
+  renderTagPills();
+  renderServicesList();
+}
+
+/* ---------- FEATURE 3: Galerie modele cu imagini multiple & hashtag-uri ---------- */
+const modelsState = { activeTag: 'Toate' };
+
+function allServiceTags(){
+  const set = new Set();
+  state.services.forEach(s => (s.tags || []).forEach(t => set.add(t)));
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ro'));
+}
+
+function renderTagPills(){
+  const wrap = document.getElementById('tagPillsWrap');
+  if (!wrap) return;
+  const tags = ['Toate', ...allServiceTags()];
+  wrap.innerHTML = tags.map(t => `<button type="button" class="tag-pill ${modelsState.activeTag === t ? 'active' : ''}" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('');
+  wrap.querySelectorAll('.tag-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modelsState.activeTag = btn.dataset.tag;
+      renderTagPills();
+      renderServicesList();
+    });
+  });
+}
+
+function serviceImages(s){
+  if (s.images && s.images.length) return s.images;
+  if (s.imageUrl) return [s.imageUrl];
+  return [];
+}
+
+const MODEL_THUMB_FALLBACK_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`;
+
+function renderServicesList(){
+  const list = document.getElementById('servicesList');
+  if (!list) return;
+  const filtered = state.services.filter(s => modelsState.activeTag === 'Toate' || (s.tags || []).includes(modelsState.activeTag));
+  if (filtered.length === 0){
+    list.innerHTML = `<p class="settings-hint" style="margin:0;">${modelsState.activeTag !== 'Toate' ? 'Niciun serviciu cu acest hashtag.' : 'Niciun serviciu adăugat încă.'}</p>`;
+    return;
+  }
+  list.innerHTML = filtered.map(s => {
+    const imgs = serviceImages(s);
+    const cover = imgs[0];
+    const extraThumbs = imgs.slice(1, 5);
+    return `
+    <div class="model-card">
+      ${cover
+        ? `<img class="model-thumb" src="${escapeHtml(cover)}" alt="${escapeHtml(s.name)}" data-svc="${s.id}" data-img="0" style="cursor:zoom-in;" onerror="this.outerHTML='<div class=&quot;model-thumb-fallback&quot;>${MODEL_THUMB_FALLBACK_SVG.replace(/"/g, '&quot;')}</div>'" />`
+        : `<div class="model-thumb-fallback">${MODEL_THUMB_FALLBACK_SVG}</div>`}
+      <div class="model-body">
+        <div class="model-title-row">
+          <span class="model-swatch" style="background:${s.color}"></span>
+          <span class="model-name">${escapeHtml(s.name)}</span>
+        </div>
+        <div class="model-meta">${s.durationMinutes} min · ${s.price} lei${imgs.length > 1 ? ` · ${imgs.length} poze` : ''}</div>
+        ${s.description ? `<div class="model-desc">${escapeHtml(s.description)}</div>` : ''}
+        ${extraThumbs.length ? `<div class="model-gallery-strip">${extraThumbs.map((u, i) => `<img class="model-gallery-thumb" src="${escapeHtml(u)}" data-svc="${s.id}" data-img="${i + 1}" alt="" />`).join('')}</div>` : ''}
+        ${(s.tags && s.tags.length) ? `<div class="model-tags">${s.tags.map(t => `<button type="button" class="model-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}</div>` : ''}
+      </div>
+    </div>
+  `;
+  }).join('');
+
+  list.querySelectorAll('img[data-svc]').forEach(img => {
+    img.addEventListener('click', () => {
+      const svc = state.services.find(s => s.id === img.dataset.svc);
+      if (!svc) return;
+      const imgs = serviceImages(svc);
+      if (imgs.length) openLightbox(imgs, Number(img.dataset.img) || 0);
+    });
+  });
+  list.querySelectorAll('.model-tag-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      modelsState.activeTag = pill.dataset.tag;
+      renderTagPills();
+      renderServicesList();
+    });
+  });
+}
+
+/* ---------- Lightbox (previzualizare poze la mărime completă) ---------- */
+const lightboxState = { images: [], index: 0 };
+
+function ensureLightboxModal(){
+  if (document.getElementById('lightboxModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="lightboxModal" class="lightbox-dialog">
+      <button type="button" class="icon-btn lightbox-close" id="lightboxClose">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <button type="button" class="lightbox-nav lightbox-prev" id="lightboxPrev">‹</button>
+      <img id="lightboxImg" class="lightbox-img" alt="" />
+      <button type="button" class="lightbox-nav lightbox-next" id="lightboxNext">›</button>
+      <div class="lightbox-counter" id="lightboxCounter"></div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  const dlg = document.getElementById('lightboxModal');
+  document.getElementById('lightboxClose').addEventListener('click', () => dlg.close());
+  document.getElementById('lightboxPrev').addEventListener('click', () => shiftLightbox(-1));
+  document.getElementById('lightboxNext').addEventListener('click', () => shiftLightbox(1));
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+}
+
+function shiftLightbox(delta){
+  const n = lightboxState.images.length;
+  lightboxState.index = ((lightboxState.index + delta) % n + n) % n;
+  renderLightbox();
+}
+
+function renderLightbox(){
+  document.getElementById('lightboxImg').src = lightboxState.images[lightboxState.index];
+  document.getElementById('lightboxCounter').textContent = `${lightboxState.index + 1} / ${lightboxState.images.length}`;
+  const multi = lightboxState.images.length > 1;
+  document.getElementById('lightboxPrev').classList.toggle('hidden', !multi);
+  document.getElementById('lightboxNext').classList.toggle('hidden', !multi);
+}
+
+function openLightbox(images, index){
+  ensureLightboxModal();
+  lightboxState.images = images;
+  lightboxState.index = Math.min(Math.max(index, 0), images.length - 1);
+  renderLightbox();
+  document.getElementById('lightboxModal').showModal();
+}
+
+/* ---------- Galerie Clientă (catalog simplificat, fără prețuri/editare) ---------- */
+const clientGalleryState = { activeTag: 'Toate' };
+
+function ensureClientGalleryModal(){
+  if (document.getElementById('clientGalleryModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="clientGalleryModal" class="client-gallery-dialog">
+      <div class="sheet-header">
+        <div class="sheet-title">Galerie Modele</div>
+        <button type="button" class="icon-btn" id="closeClientGallery">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="tag-pills" id="clientGalleryTagPills"></div>
+        <div class="client-gallery-grid" id="clientGalleryGrid"></div>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('clientGalleryModal'));
+  document.getElementById('closeClientGallery').addEventListener('click', () => document.getElementById('clientGalleryModal').close());
+}
+
+function openClientGalleryModal(){
+  ensureClientGalleryModal();
+  clientGalleryState.activeTag = 'Toate';
+  renderClientGalleryTagPills();
+  renderClientGalleryGrid();
+  document.getElementById('clientGalleryModal').showModal();
+}
+
+function renderClientGalleryTagPills(){
+  const wrap = document.getElementById('clientGalleryTagPills');
+  const tags = ['Toate', ...allServiceTags()];
+  wrap.innerHTML = tags.map(t => `<button type="button" class="tag-pill ${clientGalleryState.activeTag === t ? 'active' : ''}" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('');
+  wrap.querySelectorAll('.tag-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clientGalleryState.activeTag = btn.dataset.tag;
+      renderClientGalleryTagPills();
+      renderClientGalleryGrid();
+    });
+  });
+}
+
+function renderClientGalleryGrid(){
+  const grid = document.getElementById('clientGalleryGrid');
+  const filtered = state.services.filter(s => serviceImages(s).length && (clientGalleryState.activeTag === 'Toate' || (s.tags || []).includes(clientGalleryState.activeTag)));
+  if (filtered.length === 0){
+    grid.innerHTML = `<p class="settings-hint" style="grid-column:1/-1;">Niciun model cu poze pentru acest filtru.</p>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(s => `
+    <div class="client-gallery-card">
+      <img class="client-gallery-cover" src="${escapeHtml(serviceImages(s)[0])}" alt="${escapeHtml(s.name)}" data-svc="${s.id}" />
+      <div class="client-gallery-name">${escapeHtml(s.name)}</div>
+      ${(s.tags && s.tags.length) ? `<div class="client-gallery-tags">${s.tags.map(t => `<span class="model-tag-pill" style="cursor:default;">#${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+    </div>
+  `).join('');
+  grid.querySelectorAll('.client-gallery-cover').forEach(img => {
+    img.addEventListener('click', () => {
+      const svc = state.services.find(s => s.id === img.dataset.svc);
+      if (svc) openLightbox(serviceImages(svc), 0);
+    });
+  });
+}
+
+async function saveNewService(){
+  const btn = document.getElementById('saveSvcBtn');
+  const errEl = document.getElementById('svcError');
+  const okEl = document.getElementById('svcSuccess');
+  errEl.classList.add('hidden'); okEl.classList.add('hidden');
+  const name = document.getElementById('svcName').value.trim();
+  const durationMinutes = parseInt(document.getElementById('svcDuration').value, 10);
+  const price = parseFloat(document.getElementById('svcPrice').value);
+  const color = document.getElementById('svcColor').value || DEFAULT_SERVICE_COLOR;
+  const imagesRaw = document.getElementById('svcImages').value.trim();
+  const tagsRaw = document.getElementById('svcTags').value.trim();
+  const description = document.getElementById('svcDescription').value.trim();
+  const images = parseImagesField(imagesRaw, null);
+  const tags = parseTagsField(tagsRaw);
+
+  if (!name){ errEl.textContent = 'Numele serviciului este obligatoriu.'; errEl.classList.remove('hidden'); return; }
+  if (!durationMinutes || durationMinutes <= 0){ errEl.textContent = 'Durata trebuie să fie un număr de minute mai mare ca 0.'; errEl.classList.remove('hidden'); return; }
+  if (isNaN(price) || price < 0){ errEl.textContent = 'Prețul trebuie să fie un număr valid.'; errEl.classList.remove('hidden'); return; }
+
+  const toastId = showToast('Se adaugă serviciul…', 'saving', { persist: true });
+  btn.disabled = true; btn.textContent = 'Se adaugă…';
+  try {
+    await addService({
+      name, durationMinutes, price, color,
+      imageUrl: images[0] || '', description,
+      images, tags,
+      includeMedia: !!state.serviceMediaColumnsOk,
+      includeGallery: !!state.serviceGalleryColumnsOk,
+    });
+    document.getElementById('svcName').value = '';
+    document.getElementById('svcDuration').value = '60';
+    document.getElementById('svcPrice').value = '100';
+    document.getElementById('svcColor').value = DEFAULT_SERVICE_COLOR;
+    document.getElementById('svcImages').value = '';
+    document.getElementById('svcTags').value = '';
+    document.getElementById('svcDescription').value = '';
+    document.querySelectorAll('#presetSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
+    state.services = await getServices(); // actualizează global -> instant valabil în orice modal
+    renderTagPills();
+    renderServicesList();
+    okEl.textContent = 'Serviciu adăugat.'; okEl.classList.remove('hidden');
+    updateToast(toastId, 'Serviciu adăugat.', 'success', 1800);
+  } catch (e){
+    if (e.code === '42703'){ errEl.textContent = 'O coloană nouă nu există încă — rulează SQL-ul de mai sus în Supabase, apoi încearcă din nou.'; }
+    else { errEl.textContent = 'Eroare la adăugare: ' + (e.message || e); }
+    errEl.classList.remove('hidden');
+    updateToast(toastId, 'Eroare la adăugare.', 'error', 2600);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Adaugă serviciul';
+  }
+}
+
+/* ---------- Statistici ---------- */
+async function changeStatsMonth(delta){
+  const d = new Date(statsState.month);
+  d.setMonth(d.getMonth() + delta);
+  statsState.month = d;
+  loadStats(); // instant, din cache
+  // Dacă luna aleasă e în afara ferestrei deja cache-uite, o extindem în fundal
+  // (fără spinner) și recalculăm — dar loadStats însuși rămâne 100% din cache.
+  const from = new Date(d.getFullYear(), d.getMonth(), 1);
+  const to = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+  if (!cacheRangeCovers(from, to)){
+    try { await ensureRangeCached(from, to); loadStats(); } catch (e){ /* offline — rămân datele locale */ }
+  }
+}
+
+/** Calculează statisticile lunii selectate direct din cache.appointments —
+ * 0ms, fără nicio cerere de rețea către Supabase. Prețul fiecărui serviciu
+ * este preluat din state.services (deja încărcat în memorie). */
+function loadStats(){
+  const label = document.getElementById('statsMonthLabel');
+  const body = document.getElementById('statsBody');
+  if (!label || !body) return;
+  label.textContent = fmtMonthHeader(statsState.month);
+  if (!state.employee){ body.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio angajată configurată.</p>`; return; }
+
+  const y = statsState.month.getFullYear();
+  const m = statsState.month.getMonth();
+  const priceById = new Map(state.services.map(s => [s.id, Number(s.price) || 0]));
+
+  const active = cache.appointments.filter(a =>
+    a.employeeId === state.employee.id &&
+    a.startTime.getFullYear() === y && a.startTime.getMonth() === m &&
+    (a.status === 'confirmed' || a.status === 'completed')
+  );
+  const total = active.reduce((sum, a) => sum + (priceById.get(a.serviceId) || 0), 0);
+  const distinctClients = new Set(active.map(a => a.clientId)).size;
+
+  body.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">${total.toLocaleString('ro-RO')} lei</div>
+        <div class="stat-label">Venit total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${distinctClients}</div>
+        <div class="stat-label">Cliente servite</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ====================== MODAL: PROGRAMARE NOUĂ ====================== */
+function ensureModal(){
+  if (document.getElementById('addModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="addModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Programare nouă</div>
+        <button class="icon-btn" id="closeModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="field">
+          <label>Ziua</label>
+          <div class="modal-date-row">
+            <button type="button" class="date-arrow-sm" id="modalPrevDay">‹</button>
+            <div class="date-picker-wrap">
+              <div class="date-label" id="modalDateLabel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span id="modalDateLabelText"></span>
+              </div>
+              <input type="date" id="modalDate" class="date-input-hidden" />
+            </div>
+            <button type="button" class="date-arrow-sm" id="modalNextDay">›</button>
+          </div>
+        </div>
+        <div class="vacation-banner hidden" id="modalVacationWarning"></div>
+        <div class="field">
+          <label for="serviceSelect">Serviciu</label>
+          <select id="serviceSelect"><option value="">Alege serviciul…</option></select>
+        </div>
+        ${clientPickerHtml('add')}
+        <div id="slotsSection" class="hidden">
+          <div class="slots-label">Alege ora</div>
+          <div class="slots-wrap" id="slotsWrap"></div>
+        </div>
+        <p class="hint-text" id="slotsHint">Alege mai întâi un serviciu ca să vezi orele libere.</p>
+      </div>
+      <div class="sheet-footer">
+        <p class="error-text hidden" id="modalError"></p>
+        <button class="btn-primary" id="saveAppt" disabled>Salvează programarea</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('addModal'));
+  wireModal();
+}
+
+const modalState = { day: new Date(), selectedService: null, selectedClient: null, selectedSlot: null, slots: [] };
+
+function wireModal(){
+  const dlg = document.getElementById('addModal');
+  document.getElementById('closeModal').addEventListener('click', () => dlg.close());
+
+  document.getElementById('modalPrevDay').addEventListener('click', () => shiftModalDay(-1));
+  document.getElementById('modalNextDay').addEventListener('click', () => shiftModalDay(1));
+  document.getElementById('modalDate').addEventListener('change', e => {
+    if (!e.target.value) return;
+    const [y, m, d] = e.target.value.split('-').map(Number);
+    modalState.day = new Date(y, m - 1, d);
+    document.getElementById('modalDateLabelText').textContent = fmtDateHeader(modalState.day);
+    checkModalVacation();
+    refreshSlots();
+  });
+
+  document.getElementById('serviceSelect').addEventListener('change', e => {
+    modalState.selectedService = state.services.find(s => s.id === e.target.value) || null;
+    refreshSlots();
+    updateSaveEnabled();
+  });
+
+  wireClientPicker('add', {
+    get: () => modalState.selectedClient,
+    set: c => { modalState.selectedClient = c; },
+    onChange: updateSaveEnabled,
+  });
+  wireNewClientBox('add', { onCreated: () => updateSaveEnabled() });
+
+  document.getElementById('saveAppt').addEventListener('click', saveAppointment);
+}
+
+function shiftModalDay(delta){
+  const d = new Date(modalState.day);
+  d.setDate(d.getDate() + delta);
+  modalState.day = d;
+  document.getElementById('modalDateLabelText').textContent = fmtDateHeader(d);
+  document.getElementById('modalDate').value = ymd(d);
+  checkModalVacation();
+  refreshSlots();
+}
+
+/** Afișează avertismentul de concediu în modalul „Programare nouă” pentru
+ * ziua curent selectată acolo, și dezactivează salvarea cât timp e activ. */
+function checkModalVacation(){
+  const banner = document.getElementById('modalVacationWarning');
+  const vac = findVacationForDay(modalState.day);
+  if (vac){
+    banner.classList.remove('hidden');
+    banner.innerHTML = `🏖️ <span><strong>Concediu în această zi</strong> — ${escapeHtml(vac.description || 'zi liberă')}. Nu se pot adăuga programări.</span>`;
+  } else {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+  }
+  updateSaveEnabled();
+  return !!vac;
+}
+
+function renderServiceOptions(){
+  const sel = document.getElementById('serviceSelect');
+  sel.innerHTML = `<option value="">Alege serviciul…</option>` +
+    state.services.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.durationMinutes} min, ${s.price} lei)</option>`).join('');
+}
+
+async function openAddModal(){
+  ensureModal();
+  const dlg = document.getElementById('addModal');
+  if (dlg.open) return;
+
+  modalState.day = new Date(state.selectedDay);
+  modalState.selectedService = null;
+  modalState.selectedClient = null;
+  modalState.selectedSlot = null;
+  modalState.slots = [];
+
+  document.getElementById('modalDateLabelText').textContent = fmtDateHeader(modalState.day);
+  document.getElementById('modalDate').value = ymd(modalState.day);
+  document.getElementById('serviceSelect').value = '';
+  resetClientPickerUI('add');
+  document.getElementById('addNewClientBox').classList.add('hidden');
+  document.getElementById('slotsSection').classList.add('hidden');
+  document.getElementById('slotsHint').classList.remove('hidden');
+  document.getElementById('slotsHint').textContent = 'Alege mai întâi un serviciu ca să vezi orele libere.';
+  document.getElementById('modalError').classList.add('hidden');
+  checkModalVacation();
+
+  dlg.showModal();
+
+  try {
+    if (state.services.length === 0) state.services = await getServices();
+    if (state.clients.length === 0) state.clients = await getClients();
+  } catch (e){ showModalError('Eroare la încărcarea datelor: ' + (e.message || e)); }
+  renderServiceOptions();
+  resetClientPickerUI('add');
+}
+
+async function refreshSlots(){
+  const wrap = document.getElementById('slotsWrap');
+  const section = document.getElementById('slotsSection');
+  const hint = document.getElementById('slotsHint');
+  modalState.selectedSlot = null;
+  updateSaveEnabled();
+  if (findVacationForDay(modalState.day)){
+    section.classList.add('hidden'); hint.classList.add('hidden');
+    return;
+  }
+  if (!modalState.selectedService){
+    section.classList.add('hidden'); hint.classList.remove('hidden');
+    hint.textContent = 'Alege mai întâi un serviciu ca să vezi orele libere.';
+    return;
+  }
+  hint.classList.remove('hidden'); hint.textContent = 'Se calculează orele libere…';
+  section.classList.add('hidden');
+  try {
+    const slots = await getFreeSlots({ employeeId: state.employee.id, day: modalState.day, serviceDurationMinutes: modalState.selectedService.durationMinutes });
+    modalState.slots = slots;
+    if (slots.length === 0){ hint.textContent = 'Nu există ore libere în această zi pentru durata aleasă.'; section.classList.add('hidden'); return; }
+    hint.classList.add('hidden'); section.classList.remove('hidden');
+    wrap.innerHTML = slots.map((s, i) => `<button type="button" class="slot-btn" data-i="${i}"><span class="dot"></span>${fmtTime(s.start)}</button>`).join('');
+    wrap.querySelectorAll('.slot-btn').forEach(btnEl => {
+      btnEl.addEventListener('click', () => {
+        wrap.querySelectorAll('.slot-btn').forEach(c => c.classList.remove('selected'));
+        btnEl.classList.add('selected');
+        modalState.selectedSlot = modalState.slots[Number(btnEl.dataset.i)];
+        updateSaveEnabled();
+      });
+    });
+  } catch (e){
+    hint.textContent = isNetworkError(e) ? 'Fără conexiune — nu se pot calcula orele libere acum.' : 'Eroare la calculul orelor libere: ' + (e.message || e);
+  }
+}
+
+function updateSaveEnabled(){
+  const blocked = !!findVacationForDay(modalState.day);
+  const ok = modalState.selectedClient && modalState.selectedService && modalState.selectedSlot && !blocked;
+  document.getElementById('saveAppt').disabled = !ok;
+}
+
+function showModalError(msg){
+  const p = document.getElementById('modalError');
+  p.textContent = msg; p.classList.remove('hidden');
+}
+
+/** Salvare optimistă: intră instant în cache + UI (0ms), apoi confirmă
+ * în fundal către Supabase. Fără conexiune -> coadă offline. La orice altă
+ * eroare -> rollback + notificare. */
+async function saveAppointment(){
+  if (!modalState.selectedClient || !modalState.selectedService || !modalState.selectedSlot) return;
+  if (findVacationForDay(modalState.day)) return;
+  document.getElementById('modalError').classList.add('hidden');
+
+  const employeeId = state.employee.id;
+  const clientId = modalState.selectedClient.id;
+  const serviceId = modalState.selectedService.id;
+  const start = modalState.selectedSlot.start;
+  const end = modalState.selectedSlot.end;
+
+  const optimisticId = uid('optimistic-appt');
+  const optimistic = {
+    id: optimisticId, employeeId, clientId, serviceId,
+    startTime: start, endTime: end, status: 'unconfirmed', notes: null,
+    clientName: modalState.selectedClient.name,
+    serviceName: modalState.selectedService.name,
+    serviceColor: modalState.selectedService.color,
+    optimisticPending: true,
+  };
+
+  cache.appointments.push(optimistic);
+  document.getElementById('addModal').close();
+  syncMainViewToDay(modalState.day);
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+
+  const toastId = showToast('Se salvează programarea…', 'saving', { persist: true });
+
+  const goOffline = () => {
+    const item = queueOfflineAppointment({ employeeId, clientId, serviceId, start: start.toISOString(), end: end.toISOString(), notes: null, status: 'unconfirmed' });
+    const idx = cache.appointments.findIndex(a => a.id === optimisticId);
+    if (idx >= 0) cache.appointments[idx] = { ...optimistic, id: item.id, pendingOffline: true, optimisticPending: false };
+    renderDayFromCache();
+    updateToast(toastId, 'Fără conexiune — programarea a fost salvată local și se sincronizează automat.', 'warning', 3600);
+  };
+
+  if (!navigator.onLine){ goOffline(); return; }
+
+  try {
+    const row = await addAppointment({ employeeId, clientId, serviceId, start, end, notes: null, status: 'unconfirmed' });
+    const idx = cache.appointments.findIndex(a => a.id === optimisticId);
+    if (idx >= 0) cache.appointments[idx] = mapApptRow(row);
+    renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
+    refreshUnconfirmedBadge();
+    updateToast(toastId, 'Programare salvată.', 'success', 1800);
+  } catch (e){
+    if (isNetworkError(e)){
+      goOffline();
+    } else {
+      cache.appointments = cache.appointments.filter(a => a.id !== optimisticId);
+      renderDayFromCache();
+      computeMonthDayColorsFromCache();
+      renderCalendar();
+      updateToast(toastId, 'Eroare la salvare — programarea a fost anulată: ' + (e.message || e), 'error', 4200);
+    }
+  }
+}
+
+/* ====================== MODAL: EDITARE PROGRAMARE ====================== */
+function ensureEditModal(){
+  if (document.getElementById('editModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="editModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Editează programarea</div>
+        <button class="icon-btn" id="closeEditModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div class="field">
+          <label>Ziua</label>
+          <div class="modal-date-row">
+            <button type="button" class="date-arrow-sm" id="editPrevDay">‹</button>
+            <div class="date-picker-wrap">
+              <div class="date-label" id="editDateLabel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span id="editDateLabelText"></span>
+              </div>
+              <input type="date" id="editDate" class="date-input-hidden" />
+            </div>
+            <button type="button" class="date-arrow-sm" id="editNextDay">›</button>
+          </div>
+        </div>
+        <div class="vacation-banner hidden" id="editVacationWarning"></div>
+        <div class="field">
+          <label for="editServiceSelect">Serviciu</label>
+          <select id="editServiceSelect"><option value="">Alege serviciul…</option></select>
+        </div>
+        ${clientPickerHtml('edit')}
+        <div class="field">
+          <label>Ora programării</label>
+          <div class="current-slot-box" id="editCurrentSlotBox">
+            <span id="editCurrentSlotText"></span>
+            <button type="button" class="btn-outline" id="editChangeTimeBtn">Schimbă ora</button>
+          </div>
+          <p class="hint-text hidden" id="editSmartMsg"></p>
+          <div id="editSlotsSection" class="hidden">
+            <div class="slots-label">Alege ora nouă</div>
+            <div class="slots-wrap" id="editSlotsWrap"></div>
+          </div>
+          <p class="hint-text hidden" id="editSlotsHint"></p>
+        </div>
+        <div class="field">
+          <label for="editStatusSelect">Status</label>
+          <select id="editStatusSelect">
+            <option value="unconfirmed">Neconfirmată</option>
+            <option value="confirmed">Confirmată</option>
+            <option value="completed">Finalizată</option>
+            <option value="cancelled">Anulată</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="editNotes">Notițe</label>
+          <textarea id="editNotes" rows="3" placeholder="Observații despre programare…"></textarea>
+        </div>
+      </div>
+      <div class="sheet-footer">
+        <p class="error-text hidden" id="editModalError"></p>
+        <button class="btn-primary" id="saveEditAppt">Salvează modificările</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('editModal'));
+  wireEditModal();
+}
+
+const editState = { apptId: null, day: new Date(), selectedService: null, selectedClient: null, selectedSlot: null, slots: [], status: 'confirmed' };
+
+function wireEditModal(){
+  const dlg = document.getElementById('editModal');
+  document.getElementById('closeEditModal').addEventListener('click', () => dlg.close());
+  document.getElementById('editPrevDay').addEventListener('click', () => shiftEditDay(-1));
+  document.getElementById('editNextDay').addEventListener('click', () => shiftEditDay(1));
+  document.getElementById('editDate').addEventListener('change', e => {
+    if (!e.target.value) return;
+    const [y, m, d] = e.target.value.split('-').map(Number);
+    editState.day = new Date(y, m - 1, d);
+    document.getElementById('editDateLabelText').textContent = fmtDateHeader(editState.day);
+    checkEditVacation();
+    enterChangeTimeMode();
+    refreshEditSlots();
+  });
+  document.getElementById('editServiceSelect').addEventListener('change', e => {
+    editState.selectedService = state.services.find(s => s.id === e.target.value) || null;
+    handleServiceChangeSmart();
+  });
+  document.getElementById('editChangeTimeBtn').addEventListener('click', () => {
+    enterChangeTimeMode();
+    refreshEditSlots();
+  });
+  wireClientPicker('edit', {
+    get: () => editState.selectedClient,
+    set: c => { editState.selectedClient = c; },
+    onChange: () => {},
+  });
+  wireNewClientBox('edit', { onCreated: () => {} });
+  document.getElementById('saveEditAppt').addEventListener('click', saveEditAppointment);
+}
+
+/** Afișează avertismentul de concediu în modalul de editare, pentru ziua
+ * curent selectată acolo. */
+function checkEditVacation(){
+  const banner = document.getElementById('editVacationWarning');
+  if (!banner) return false;
+  const vac = findVacationForDay(editState.day);
+  if (vac){
+    banner.classList.remove('hidden');
+    banner.innerHTML = `🏖️ <span><strong>Concediu în această zi</strong> — ${escapeHtml(vac.description || 'zi liberă')}.</span>`;
+  } else {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+  }
+  return !!vac;
+}
+
+/** FEATURE 2: la schimbarea serviciului, păstrează ora de început curentă
+ * și recalculează automat ora de sfârșit (start + noua durată). Dacă noul
+ * interval nu se suprapune cu nimic, arată un mesaj verde și NU deschide
+ * lista de sloturi. Dacă se suprapune, arată un avertisment roșu și
+ * deschide automat selectorul de oră nouă. */
+function handleServiceChangeSmart(){
+  const msgEl = document.getElementById('editSmartMsg');
+  if (!editState.selectedService || !editState.selectedSlot || !editState.selectedSlot.start){
+    if (msgEl){ msgEl.classList.add('hidden'); msgEl.innerHTML = ''; }
+    enterChangeTimeMode();
+    refreshEditSlots();
+    return;
+  }
+  const newStart = editState.selectedSlot.start;
+  const newEnd = new Date(newStart.getTime() + editState.selectedService.durationMinutes * 60000);
+  const conflict = findConflictInCache({
+    employeeId: state.employee.id,
+    day: editState.day,
+    start: newStart,
+    end: newEnd,
+    excludeApptId: editState.apptId,
+  });
+
+  if (!conflict){
+    editState.selectedSlot = { start: newStart, end: newEnd };
+    renderCurrentSlotBox();
+    if (msgEl){
+      msgEl.classList.remove('hidden');
+      msgEl.style.color = 'var(--success)';
+      msgEl.innerHTML = `✓ Păstrează ora ${fmtTime(newStart)}. Noul interval va fi <strong>${fmtTime(newStart)} – ${fmtTime(newEnd)}</strong>.`;
+    }
+  } else {
+    if (msgEl){
+      msgEl.classList.remove('hidden');
+      msgEl.style.color = 'var(--accent)';
+      const conflictLabel = conflict.type === 'appt'
+        ? `altă programare${conflict.clientName ? ' (' + escapeHtml(conflict.clientName) + ')' : ''} de la ${fmtTime(conflict.start)}`
+        : conflict.type === 'block' ? `celălalt job de la ${fmtTime(conflict.start)}`
+        : `programul de lucru din această zi`;
+      msgEl.innerHTML = `⚠ Atenție: Noul serviciu se suprapune cu ${conflictLabel}! Alege o oră nouă.`;
+    }
+    enterChangeTimeMode();
+    refreshEditSlots();
+  }
+}
+
+/** Ascunde afișarea orei curente și arată lista de sloturi de ales o oră nouă. */
+function enterChangeTimeMode(){
+  document.getElementById('editCurrentSlotBox').classList.add('hidden');
+  document.getElementById('editSlotsSection').classList.remove('hidden');
+  document.getElementById('editSlotsHint').classList.remove('hidden');
+  const msgEl = document.getElementById('editSmartMsg');
+  if (msgEl){ msgEl.classList.add('hidden'); msgEl.innerHTML = ''; }
+}
+
+function renderCurrentSlotBox(){
+  const text = document.getElementById('editCurrentSlotText');
+  text.textContent = editState.selectedSlot ? `${fmtTime(editState.selectedSlot.start)} – ${fmtTime(editState.selectedSlot.end)}` : '—';
+  document.getElementById('editCurrentSlotBox').classList.remove('hidden');
+  document.getElementById('editSlotsSection').classList.add('hidden');
+  document.getElementById('editSlotsHint').classList.add('hidden');
+}
+
+function shiftEditDay(delta){
+  const d = new Date(editState.day);
+  d.setDate(d.getDate() + delta);
+  editState.day = d;
+  document.getElementById('editDateLabelText').textContent = fmtDateHeader(d);
+  document.getElementById('editDate').value = ymd(d);
+  checkEditVacation();
+  refreshEditSlots();
+}
+
+async function openEditModal(appt){
+  if (!navigator.onLine){
+    showToast('Necesită conexiune la internet pentru a edita o programare existentă.', 'warning', { autoHide: 3000 });
+    return;
+  }
+  ensureEditModal();
+  const dlg = document.getElementById('editModal');
+  if (dlg.open) return;
+
+  editState.apptId = appt.id;
+  editState.day = new Date(appt.startTime.getFullYear(), appt.startTime.getMonth(), appt.startTime.getDate());
+  editState.selectedService = state.services.find(s => s.id === appt.serviceId) || null;
+  editState.selectedClient = state.clients.find(c => c.id === appt.clientId) || (appt.clientName ? { id: appt.clientId, name: appt.clientName, phone: '' } : null);
+  editState.selectedSlot = { start: appt.startTime, end: appt.endTime };
+  editState.status = appt.status;
+
+  document.getElementById('editDateLabelText').textContent = fmtDateHeader(editState.day);
+  document.getElementById('editDate').value = ymd(editState.day);
+  document.getElementById('editStatusSelect').value = appt.status;
+  document.getElementById('editNotes').value = appt.notes || '';
+  document.getElementById('editModalError').classList.add('hidden');
+
+  try {
+    if (state.services.length === 0) state.services = await getServices();
+    if (state.clients.length === 0) state.clients = await getClients();
+  } catch (e){ /* continuăm cu ce avem local */ }
+
+  const sel = document.getElementById('editServiceSelect');
+  sel.innerHTML = `<option value="">Alege serviciul…</option>` +
+    state.services.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.durationMinutes} min, ${s.price} lei)</option>`).join('');
+  sel.value = editState.selectedService ? editState.selectedService.id : '';
+
+  resetClientPickerUI('edit');
+  if (editState.selectedClient){
+    pickerHandlers['edit'](editState.selectedClient);
+  }
+
+  checkEditVacation();
+  renderCurrentSlotBox();
+  dlg.showModal();
+}
+
+async function refreshEditSlots(){
+  const wrap = document.getElementById('editSlotsWrap');
+  const section = document.getElementById('editSlotsSection');
+  const hint = document.getElementById('editSlotsHint');
+  if (!editState.selectedService){
+    section.classList.add('hidden'); hint.classList.remove('hidden');
+    hint.textContent = 'Alege un serviciu ca să vezi orele libere.';
+    return;
+  }
+  hint.classList.remove('hidden'); hint.textContent = 'Se calculează orele libere…';
+  section.classList.add('hidden');
+  try {
+    const slots = await getFreeSlots({
+      employeeId: state.employee.id, day: editState.day,
+      serviceDurationMinutes: editState.selectedService.durationMinutes,
+      excludeApptId: editState.apptId,
+    });
+    editState.slots = slots;
+    if (slots.length === 0){ hint.textContent = 'Nu există ore libere în această zi pentru durata aleasă.'; section.classList.add('hidden'); return; }
+    hint.classList.add('hidden'); section.classList.remove('hidden');
+    const currentStartMs = editState.selectedSlot ? editState.selectedSlot.start.getTime() : null;
+    let matchedCurrent = false;
+    wrap.innerHTML = slots.map((s, i) => {
+      const isCurrent = currentStartMs !== null && isSameDay(s.start, editState.day) && s.start.getTime() === currentStartMs;
+      if (isCurrent) matchedCurrent = true;
+      return `<button type="button" class="slot-btn ${isCurrent ? 'selected' : ''}" data-i="${i}"><span class="dot"></span>${fmtTime(s.start)}</button>`;
+    }).join('');
+    if (matchedCurrent) editState.selectedSlot = slots.find(s => s.start.getTime() === currentStartMs);
+    else editState.selectedSlot = null;
+    wrap.querySelectorAll('.slot-btn').forEach(btnEl => {
+      btnEl.addEventListener('click', () => {
+        wrap.querySelectorAll('.slot-btn').forEach(c => c.classList.remove('selected'));
+        btnEl.classList.add('selected');
+        editState.selectedSlot = editState.slots[Number(btnEl.dataset.i)];
+      });
+    });
+  } catch (e){
+    hint.textContent = isNetworkError(e) ? 'Fără conexiune — nu se pot calcula orele libere acum.' : 'Eroare: ' + (e.message || e);
+  }
+}
+
+function showEditModalError(msg){
+  const p = document.getElementById('editModalError');
+  p.innerHTML = msg; p.classList.remove('hidden');
+}
+
+/** Salvare optimistă a editării: cache-ul + UI-ul se actualizează instant
+ * (0ms), apoi cererea se trimite în fundal către Supabase. La eroare,
+ * revine la starea anterioară și anunță utilizatorul. */
+async function saveEditAppointment(){
+  if (!editState.selectedClient || !editState.selectedService){
+    showEditModalError('Alege o clientă și un serviciu.'); return;
+  }
+  const status = document.getElementById('editStatusSelect').value;
+  const notes = document.getElementById('editNotes').value.trim();
+  if (status !== 'cancelled' && !editState.selectedSlot){
+    showEditModalError('Alege o oră disponibilă.'); return;
+  }
+  if (status !== 'cancelled' && findVacationForDay(editState.day)){
+    showEditModalError('Ziua aleasă este marcată drept concediu — alege altă zi sau anulează programarea.'); return;
+  }
+  document.getElementById('editModalError').classList.add('hidden');
+
+  const id = editState.apptId;
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  const previous = idx >= 0 ? { ...cache.appointments[idx] } : null;
+  const updated = {
+    ...(previous || {}),
+    id,
+    serviceId: editState.selectedService.id,
+    clientId: editState.selectedClient.id,
+    serviceName: editState.selectedService.name,
+    serviceColor: editState.selectedService.color,
+    clientName: editState.selectedClient.name,
+    notes: notes || null,
+    status,
+  };
+  if (editState.selectedSlot){
+    updated.startTime = editState.selectedSlot.start;
+    updated.endTime = editState.selectedSlot.end;
+  }
+  if (idx >= 0) cache.appointments[idx] = updated;
+
+  document.getElementById('editModal').close();
+  syncMainViewToDay(editState.day);
+  // Actualizare LIVE instant (0ms) — fără să aștepte răspunsul serverului.
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+  refreshUnconfirmedBadge();
+
+  const toastId = showToast('Se salvează modificările…', 'saving', { persist: true });
+  try {
+    const payload = {
+      service_id: editState.selectedService.id,
+      client_id: editState.selectedClient.id,
+      notes: notes || null,
+      status,
+    };
+    if (editState.selectedSlot){
+      payload.start_time = editState.selectedSlot.start.toISOString();
+      payload.end_time = editState.selectedSlot.end.toISOString();
+    }
+    await updateAppointmentRow(id, payload);
+    refreshUnconfirmedBadge();
+    updateToast(toastId, 'Programare actualizată.', 'success', 1800);
+  } catch (e){
+    if (idx >= 0 && previous) cache.appointments[idx] = previous;
+    renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
+    refreshUnconfirmedBadge();
+    if (e.isStatusCheck){
+      updateToast(toastId, `Statusul „${status}” necesită o mică actualizare în Supabase (vezi SQL-ul din Setări) — s-a revenit la starea anterioară.`, 'warning', 4600);
+    } else {
+      updateToast(toastId, 'Eroare la salvare — s-a revenit la starea anterioară: ' + (e.message || e), 'error', 4200);
+    }
+  }
+}
+
+/* ====================== BOOTSTRAP & AUTH ====================== */
+async function bootstrapApp(){
+  ensureModal();
+  ensureEditModal();
+  loadPendingFromStorage();
+  state.calendarMonth = new Date(state.selectedDay.getFullYear(), state.selectedDay.getMonth(), 1);
+  try { const employees = await getEmployees(); state.employee = employees[0] || null; }
+  catch (e){ state.employee = null; }
+
+  if (state.employee){
+    try {
+      const { map, missingTable } = await getWeekdayHours(state.employee.id);
+      state.weekdayHours = map;
+      state.weekdayHoursMissingTable = missingTable;
+    } catch (e){ /* rămân valorile implicite 08:00-22:00 */ }
+
+    try { await bulkLoadCache(); } catch (e){ state.services = []; }
+    mergePendingIntoCache();
+  } else {
+    try { state.services = await getServices(); } catch (e){ state.services = []; }
+  }
+
+  await handleRoute();
+  if (navigator.onLine) trySyncOfflineQueue();
+}
+
+sb.auth.onAuthStateChange((_event, session) => {
+  const wasLoggedIn = !!state.session;
+  state.session = session;
+  if (session){ if (!wasLoggedIn) bootstrapApp(); }
+  else { renderLogin(); }
+});
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  state.session = session;
+  if (session) bootstrapApp();
+  else renderLogin();
+})();
+</script>
+</body>
+</html>
