@@ -2895,15 +2895,15 @@ async function loadWeekRows(){
           <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
           <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
         </div>
-        <div class="wd-times">
-          <select class="time-input wk-shift">
+          <div class="wd-times">
+          <select class="time-input wk-shift" ${off ? 'disabled' : ''}>
             <option value="">Alege programul</option>
-            <option value="08:00|12:30">08:00 - 12:30</option>
-            <option value="08:00|13:00">08:00 - 13:00</option>
-            <option value="13:00|21:30">13:00 - 21:30</option>
-            <option value="12:30|21:00">12:30 - 21:00</option>
+            <option value="08:00|12:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '12:30' ? 'selected' : ''}>08:00 - 12:30</option>
+            <option value="08:00|13:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '13:00' ? 'selected' : ''}>08:00 - 13:00</option>
+            <option value="13:00|21:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '13:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:30' ? 'selected' : ''}>13:00 - 21:30</option>
+            <option value="12:30|21:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '12:30' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:00' ? 'selected' : ''}>12:30 - 21:00</option>
           </select>
-        </div>
+         </div>
       </div>
     `;
   }).join('');
