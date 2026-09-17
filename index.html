@@ -134,6 +134,12 @@
     color:var(--ink-soft);
   }
   .icon-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-upcoming{
+    display:flex; align-items:center; gap:6px; height:32px; padding:0 12px;
+    border-radius:999px; border:1px solid var(--border); background:var(--surface);
+    color:var(--ink); font-size:13px; font-weight:600; white-space:nowrap;
+  }
+  .btn-upcoming:hover{ border-color:var(--accent); color:var(--accent); }
   .badge-count{
     position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px;
     border-radius:999px; background:var(--warn); color:#fff; font-size:10px; font-weight:700;
@@ -270,6 +276,42 @@
   .block-body{ flex:1; min-width:0; }
   .block-label{ font-weight:600; font-size:14px; color:var(--ink); }
   .block-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---------- Elemente din trecut (programări, ture, sarcini) ---------- */
+  .past-item{ opacity:0.5; filter:grayscale(35%); }
+  .past-item .appt-client, .past-item .appt-service,
+  .past-item .block-label, .past-item .task-title{ text-decoration:line-through; }
+
+  /* ---------- Sarcini custom / alte activități ---------- */
+  .task-card{
+    display:flex; gap:14px; align-items:flex-start; background:var(--surface);
+    border:1px dashed var(--border); border-left:4px solid var(--accent-2, #6B4E9C);
+    border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px;
+  }
+  .task-time{
+    flex:none; width:56px; font-family:var(--font-display); font-weight:600;
+    font-size:15px; line-height:1.25; color:var(--accent-2, #6B4E9C); padding-top:1px;
+  }
+  .task-time small{ display:block; font-weight:400; color:var(--ink-soft); font-size:12px; }
+  .task-body{ flex:1; min-width:0; }
+  .task-title{ font-weight:600; font-size:14px; color:var(--ink); }
+  .task-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---------- Panou „Urmează” (14 zile) ---------- */
+  .upcoming-item{
+    display:flex; flex-direction:column; gap:2px; padding:10px 12px;
+    border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px;
+  }
+  .upcoming-when{ font-size:12px; color:var(--ink-soft); font-weight:600; }
+  .upcoming-label{ font-size:14px; color:var(--ink); }
+
+  /* ---------- Finalizare programări trecute (sumă încasată) ---------- */
+  .finalize-row{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .finalize-row input[type="number"]{ flex:1; }
+
+  /* ---------- Selector ture predefinite (celălalt job) ---------- */
+  .wk-shift-select{ width:100%; margin-bottom:6px; }
+
   .current-slot-box{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:11px 14px; border:1px solid var(--border); border-radius:var(--radius-sm);
@@ -706,6 +748,38 @@ const SERVICE_GALLERY_SETUP_SQL =
   add column if not exists images text,
   add column if not exists tags text;`;
 
+const PAID_AMOUNT_SETUP_SQL =
+`alter table public.appointments
+  add column if not exists paid_amount numeric;`;
+
+const CUSTOM_TASKS_SETUP_SQL =
+`create table if not exists public.custom_tasks (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employees(id) on delete cascade,
+  title text not null,
+  start_time timestamptz not null,
+  end_time timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.custom_tasks enable row level security;
+
+create policy "authenticated can manage custom_tasks"
+on public.custom_tasks
+for all
+to authenticated
+using (true)
+with check (true);`;
+
+/** Cele 4 ture predefinite pentru „celălalt job” — vezi selectorul din
+ * Setări → Programul de la celălalt job. */
+const JOB_SHIFT_PRESETS = [
+  { value: '08:00-12:30', start: '08:00', end: '12:30', label: '08:00 – 12:30 (Tura dimineață)' },
+  { value: '08:00-13:00', start: '08:00', end: '13:00', label: '08:00 – 13:00 (Tura dimineață)' },
+  { value: '12:30-21:00', start: '12:30', end: '21:00', label: '12:30 – 21:00 (Tura după-amiază)' },
+  { value: '13:00-21:30', start: '13:00', end: '21:30', label: '13:00 – 21:30 (Tura după-amiază)' },
+];
+
 const VACATION_PRESET_COLORS = ['#B3A29B', '#D9B9A5', '#A9C6B8', '#B7C4DE', '#D8B7C8', '#E3C878'];
 
 /* ====================== HELPERS ====================== */
@@ -837,12 +911,15 @@ const state = {
   vacationDaysInMonth: new Map(),
   appointments: [],
   dayJobBlocks: [],
+  dayCustomTasks: [],
   services: [],
   clients: [],
   weekdayHours: {},
   weekdayHoursMissingTable: false,
   serviceMediaColumnsOk: false,
   serviceGalleryColumnsOk: false,
+  paidAmountColumnOk: false,
+  customTasksTableOk: false,
   vacationsMissingTable: false,
   pendingAppointments: [],
   pendingClients: [],
@@ -856,6 +933,7 @@ const state = {
 const cache = {
   appointments: [],
   jobBlocks: [],
+  customTasks: [],
   vacations: [],
   rangeFrom: null,
   rangeTo: null,
@@ -1300,6 +1378,18 @@ async function serviceGalleryColumnsExist(){
   return true;
 }
 
+async function paidAmountColumnExists(){
+  const { error } = await sb.from('appointments').select('paid_amount').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+async function customTasksTableExists(){
+  const { error } = await sb.from('custom_tasks').select('id').limit(1);
+  if (error && (error.code === '42P01' || (error.message || '').toLowerCase().includes('does not exist'))) return false;
+  return true;
+}
+
 async function getClients(){
   const { data, error } = await sb.from('clients').select().order('name');
   if (error) throw error;
@@ -1382,6 +1472,33 @@ async function setDayJobBlock(employeeId, day, startHHMM, endHHMM){
   if (error) throw error;
 }
 
+/** Sarcini custom / alte activități (nu sunt programări cu clientă) —
+ * apar în agenda zilei și în panoul „Urmează”. */
+async function getCustomTasks({ employeeId, from, to }){
+  const { data, error } = await sb.from('custom_tasks').select()
+    .eq('employee_id', employeeId)
+    .gte('start_time', from.toISOString())
+    .lte('end_time', to.toISOString())
+    .order('start_time');
+  if (error){
+    if (error.code === '42P01' || (error.message || '').toLowerCase().includes('does not exist')) return [];
+    throw error;
+  }
+  return data;
+}
+
+async function createCustomTask({ employeeId, title, start, end }){
+  const { error } = await sb.from('custom_tasks').insert({
+    employee_id: employeeId, title, start_time: start.toISOString(), end_time: end.toISOString(),
+  });
+  if (error) throw error;
+}
+
+async function deleteCustomTask(id){
+  const { error } = await sb.from('custom_tasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
 function mapApptRow(row){
   return {
     id: row.id,
@@ -1395,6 +1512,8 @@ function mapApptRow(row){
     clientName: row.clients ? row.clients.name : null,
     serviceName: row.services ? row.services.name : null,
     serviceColor: (row.services && row.services.color) ? row.services.color : DEFAULT_SERVICE_COLOR,
+    servicePrice: row.services && row.services.price != null ? Number(row.services.price) || 0 : 0,
+    paidAmount: row.paid_amount != null ? Number(row.paid_amount) : null,
   };
 }
 
@@ -1415,6 +1534,20 @@ async function getUnconfirmedAppointments(employeeId){
     .eq('employee_id', employeeId)
     .eq('status', 'unconfirmed')
     .order('start_time');
+  if (error) throw error;
+  return data.map(mapApptRow);
+}
+
+/** Programări TRECUTE (ora de sfârșit deja depășită) care au rămas cu
+ * status='confirmed' — adică nimeni nu le-a marcat Finalizată/Anulată.
+ * Cele cu status='unconfirmed' apar deja separat, în lista de mai sus. */
+async function getPastUnresolvedAppointments(employeeId){
+  const { data, error } = await sb.from('appointments')
+    .select('*, clients(name), services(name, color, price)')
+    .eq('employee_id', employeeId)
+    .eq('status', 'confirmed')
+    .lt('end_time', new Date().toISOString())
+    .order('start_time', { ascending: false });
   if (error) throw error;
   return data.map(mapApptRow);
 }
@@ -1505,15 +1638,19 @@ function findVacationForDay(day){
 
 /* ====================== CACHE: bulk load & filtrare instant ====================== */
 async function loadApptsAndBlocksRange(from, to){
-  if (!state.employee) return { appts: [], blocks: [] };
-  const [appts, blocksRaw] = await Promise.all([
+  if (!state.employee) return { appts: [], blocks: [], tasks: [] };
+  const [appts, blocksRaw, tasksRaw] = await Promise.all([
     getAppointments({ employeeId: state.employee.id, from, to }),
     getMainJobBlocks({ employeeId: state.employee.id, from, to }),
+    getCustomTasks({ employeeId: state.employee.id, from, to }),
   ]);
   const blocks = blocksRaw.map(b => ({
     id: b.id, employeeId: b.employee_id, start: new Date(b.start_time), end: new Date(b.end_time), label: b.label || 'Celălalt job',
   }));
-  return { appts, blocks };
+  const tasks = tasksRaw.map(t => ({
+    id: t.id, employeeId: t.employee_id, start: new Date(t.start_time), end: new Date(t.end_time), title: t.title,
+  }));
+  return { appts, blocks, tasks };
 }
 
 function cacheRangeCovers(from, to){
@@ -1526,7 +1663,7 @@ async function bulkLoadCache(){
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const to = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999);
-  const [{ appts, blocks }, vacRes, clients, services] = await Promise.all([
+  const [{ appts, blocks, tasks }, vacRes, clients, services] = await Promise.all([
     loadApptsAndBlocksRange(from, to),
     getVacations(state.employee.id),
     getClients(),
@@ -1534,6 +1671,7 @@ async function bulkLoadCache(){
   ]);
   cache.appointments = appts;
   cache.jobBlocks = blocks;
+  cache.customTasks = tasks;
   cache.vacations = vacRes.list;
   state.vacationsMissingTable = vacRes.missingTable;
   cache.rangeFrom = from;
@@ -1548,9 +1686,10 @@ async function ensureRangeCached(from, to){
   if (cacheRangeCovers(from, to)) return;
   const newFrom = cache.rangeFrom ? new Date(Math.min(from.getTime(), cache.rangeFrom.getTime())) : from;
   const newTo = cache.rangeTo ? new Date(Math.max(to.getTime(), cache.rangeTo.getTime())) : to;
-  const { appts, blocks } = await loadApptsAndBlocksRange(newFrom, newTo);
+  const { appts, blocks, tasks } = await loadApptsAndBlocksRange(newFrom, newTo);
   cache.appointments = appts;
   cache.jobBlocks = blocks;
+  cache.customTasks = tasks;
   cache.rangeFrom = newFrom;
   cache.rangeTo = newTo;
 }
@@ -1559,9 +1698,10 @@ async function ensureRangeCached(from, to){
 async function forceRefreshCache(){
   if (!state.employee || !cache.rangeFrom || !cache.rangeTo) return;
   try {
-    const { appts, blocks } = await loadApptsAndBlocksRange(cache.rangeFrom, cache.rangeTo);
+    const { appts, blocks, tasks } = await loadApptsAndBlocksRange(cache.rangeFrom, cache.rangeTo);
     cache.appointments = appts;
     cache.jobBlocks = blocks;
+    cache.customTasks = tasks;
   } catch (e){ /* offline — păstrăm ce avem local */ }
 }
 
@@ -1696,6 +1836,10 @@ function renderAppShell(){
             <span class="brand-title">Programări</span>
           </div>
           <div class="header-actions">
+            <button class="btn-upcoming" id="upcomingBtn" title="Urmează (14 zile)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              Urmează
+            </button>
             <button class="icon-btn" id="settingsBtn" title="Setări">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -1734,6 +1878,7 @@ function renderAppShell(){
 
   document.getElementById('logoutBtn').addEventListener('click', () => sb.auth.signOut());
   document.getElementById('settingsBtn').addEventListener('click', goSettings);
+  document.getElementById('upcomingBtn').addEventListener('click', openUpcomingModal);
   document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
   document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
   document.getElementById('todayBtn').addEventListener('click', async () => {
@@ -1777,9 +1922,49 @@ function wireBottomNav(){
   const addBtn = document.getElementById('bnavAddBtn');
   const unconfBtn = document.getElementById('bnavUnconfirmedBtn');
   if (modelsBtn) modelsBtn.addEventListener('click', goModels);
-  if (addBtn) addBtn.addEventListener('click', openAddModal);
+  if (addBtn) wireAddButtonInteractions(addBtn);
   if (unconfBtn) unconfBtn.addEventListener('click', openUnconfirmedModal);
   refreshUnconfirmedBadge();
+}
+
+/** Click scurt pe „+” → programare nouă (ca până acum).
+ * Apăsare lungă (~500ms, touch sau mouse) → modal „Sarcină nouă”.
+ * Un singur handler de click decide comportamentul, ca să nu depindem
+ * de ordinea/propagarea altor listenere ale aceluiași buton. */
+function wireAddButtonInteractions(btn){
+  const LONG_PRESS_MS = 500;
+  let pressTimer = null;
+  let longPressFired = false;
+
+  const startPress = () => {
+    longPressFired = false;
+    pressTimer = setTimeout(() => {
+      longPressFired = true;
+      if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e){} }
+      openNewTaskModal();
+    }, LONG_PRESS_MS);
+  };
+  const cancelPress = () => {
+    if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+  };
+
+  btn.addEventListener('touchstart', startPress, { passive: true });
+  btn.addEventListener('touchend', cancelPress);
+  btn.addEventListener('touchcancel', cancelPress);
+  btn.addEventListener('touchmove', cancelPress);
+  btn.addEventListener('mousedown', startPress);
+  btn.addEventListener('mouseup', cancelPress);
+  btn.addEventListener('mouseleave', cancelPress);
+
+  btn.addEventListener('click', (e) => {
+    if (longPressFired){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      longPressFired = false;
+      return;
+    }
+    openAddModal();
+  });
 }
 
 /** Adaugă închiderea automată la click pe backdrop (în afara chenarului)
@@ -1933,17 +2118,31 @@ function renderDayFromCache(){
   const vac = findVacationForDay(state.selectedDay);
   const appts = cache.appointments.filter(a => a.employeeId === state.employee.id && isSameDay(a.startTime, state.selectedDay));
   const blocks = cache.jobBlocks.filter(b => b.employeeId === state.employee.id && isSameDay(b.start, state.selectedDay));
+  const tasks = cache.customTasks.filter(t => t.employeeId === state.employee.id && isSameDay(t.start, state.selectedDay));
   state.appointments = appts;
   state.dayJobBlocks = blocks;
+  state.dayCustomTasks = tasks;
   renderAppointmentList(vac);
+}
+
+/** Un element (programare/bloc de job/sarcină) e considerat „trecut” dacă
+ * momentul lui de sfârșit a trecut deja de ora curentă — primește clasa
+ * CSS .past-item, indiferent de ce zi se vizualizează. */
+function isPastItem(endTime){
+  return endTime.getTime() < Date.now();
+}
+
+function buildDayItems(){
+  return [
+    ...state.appointments.map(a => ({ type: 'appt', start: a.startTime, end: a.endTime, data: a })),
+    ...state.dayJobBlocks.map(b => ({ type: 'block', start: b.start, end: b.end, data: b })),
+    ...(state.dayCustomTasks || []).map(t => ({ type: 'task', start: t.start, end: t.end, data: t })),
+  ].sort((a, b) => a.start - b.start);
 }
 
 function renderAppointmentList(vac){
   const content = document.getElementById('dayContent');
-  const items = [
-    ...state.appointments.map(a => ({ type: 'appt', start: a.startTime, data: a })),
-    ...state.dayJobBlocks.map(b => ({ type: 'block', start: b.start, data: b })),
-  ].sort((a, b) => a.start - b.start);
+  const items = buildDayItems();
 
   const vacationCardHtml = vac ? `
     <div class="vacation-card">
@@ -1961,15 +2160,31 @@ function renderAppointmentList(vac){
   }
 
   content.innerHTML = vacationCardHtml + items.map((item, idx) => {
+    const past = isPastItem(item.end);
     if (item.type === 'block'){
       const b = item.data;
       return `
-        <div class="block-card">
+        <div class="block-card ${past ? 'past-item' : ''}">
           <div class="block-time">${fmtTime(b.start)}<small>${fmtTime(b.end)}</small></div>
           <div class="block-body">
             <div class="block-label">${escapeHtml(b.label)}</div>
             <div class="block-sub">Ocupată — administrează din Setări → Programul de la celălalt job</div>
           </div>
+        </div>
+      `;
+    }
+    if (item.type === 'task'){
+      const t = item.data;
+      return `
+        <div class="task-card ${past ? 'past-item' : ''}">
+          <div class="task-time">${fmtTime(t.start)}<small>${fmtTime(t.end)}</small></div>
+          <div class="task-body">
+            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="task-sub">Sarcină / altă activitate</div>
+          </div>
+          <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
       `;
     }
@@ -1982,7 +2197,7 @@ function renderAppointmentList(vac){
     // diferențieze clar la o primă vedere.
     const color = cancelled ? 'var(--muted)' : unconfirmed ? 'var(--danger)' : a.serviceColor;
     return `
-      <div class="appt-card ${cancelled ? 'cancelled' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
+      <div class="appt-card ${cancelled ? 'cancelled' : ''} ${past ? 'past-item' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
         <div class="appt-card-top">
           <div class="appt-time">${fmtTime(a.startTime)}<small>${fmtTime(a.endTime)}</small></div>
           <div class="appt-body">
@@ -2005,32 +2220,51 @@ function renderAppointmentList(vac){
     `;
   }).join('');
 
-  // click pe card -> editare (exceptând blocurile și programările încă nesincronizate)
+  // click pe card -> editare (exceptând blocurile, sarcinile și programările încă nesincronizate)
   content.querySelectorAll('.appt-card').forEach(card => {
     card.addEventListener('click', (ev) => {
       if (ev.target.closest('.appt-cancel')) return;
       if (ev.target.closest('.reminder-actions')) return;
       if (card.dataset.pending === '1') { showToast('Se poate edita după ce se sincronizează.', 'info', { autoHide: 2000 }); return; }
       const idx = Number(card.dataset.apptIdx);
-      const apptItems = [
-        ...state.appointments.map(a => ({ type: 'appt', start: a.startTime, data: a })),
-        ...state.dayJobBlocks.map(b => ({ type: 'block', start: b.start, data: b })),
-      ].sort((a, b) => a.start - b.start);
-      const target = apptItems[idx];
+      const target = buildDayItems()[idx];
       if (target && target.type === 'appt') openEditModal(target.data);
     });
   });
 
-  content.querySelectorAll('.appt-cancel').forEach(btn => {
+  content.querySelectorAll('.appt-cancel[data-id]').forEach(btn => {
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       cancelAppointmentOptimistic(btn.dataset.id);
     });
   });
 
+  content.querySelectorAll('.appt-cancel[data-task-id]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      deleteCustomTaskOptimistic(btn.dataset.taskId);
+    });
+  });
+
   wireReminderCopyButtons(content);
 
   // Blocurile de la celălalt job se șterg doar din Setări (nu din agendă).
+}
+
+/** Șterge o sarcină custom cu actualizare optimistă a UI-ului. */
+async function deleteCustomTaskOptimistic(id){
+  if (!confirm('Ștergi această sarcină?')) return;
+  const idx = cache.customTasks.findIndex(t => t.id === id);
+  const previous = idx >= 0 ? cache.customTasks[idx] : null;
+  if (idx >= 0) cache.customTasks.splice(idx, 1);
+  renderDayFromCache();
+  try {
+    await deleteCustomTask(id);
+  } catch (e){
+    if (previous) cache.customTasks.splice(idx, 0, previous);
+    renderDayFromCache();
+    showToast('Eroare la ștergerea sarcinii: ' + (e.message || e), 'error', { autoHide: 3000 });
+  }
 }
 
 /** Anulare optimistă: actualizează cache-ul + UI-ul instant (0ms), apoi
@@ -2916,6 +3150,82 @@ async function handleUnconfirmedAction(id, newStatus, cardEl){
   }
 }
 
+/* ====================== MODAL: URMEAZĂ (14 ZILE) ====================== */
+function ensureUpcomingModal(){
+  if (document.getElementById('upcomingModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="upcomingModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Urmează — următoarele 14 zile</div>
+        <button class="icon-btn" id="closeUpcomingModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div id="upcomingList"><div class="spinner"></div></div>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('upcomingModal'));
+  document.getElementById('closeUpcomingModal').addEventListener('click', () => document.getElementById('upcomingModal').close());
+}
+
+async function openUpcomingModal(){
+  ensureUpcomingModal();
+  document.getElementById('upcomingModal').showModal();
+  await loadUpcomingList();
+}
+
+/** Combină cronologic programările cu clientele, turele de la celălalt job
+ * și sarcinile custom din următoarele 14 zile, într-o singură listă. */
+async function loadUpcomingList(){
+  const listEl = document.getElementById('upcomingList');
+  listEl.innerHTML = `<div class="spinner"></div>`;
+  if (!state.employee){ listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio angajată configurată.</p>`; return; }
+
+  const from = new Date();
+  const to = new Date(); to.setDate(to.getDate() + 14);
+
+  try {
+    const [appts, blocksRaw, tasksRaw] = await Promise.all([
+      getAppointments({ employeeId: state.employee.id, from, to }),
+      getMainJobBlocks({ employeeId: state.employee.id, from, to }),
+      getCustomTasks({ employeeId: state.employee.id, from, to }),
+    ]);
+
+    const items = [
+      ...appts.filter(a => a.status !== 'cancelled').map(a => ({
+        start: a.startTime, end: a.endTime,
+        label: `Programare ${a.clientName || 'Client'} - ${a.serviceName || ''}`,
+      })),
+      ...blocksRaw.map(b => ({
+        start: new Date(b.start_time), end: new Date(b.end_time),
+        label: `Muncă de la ora ${fmtTime(new Date(b.start_time))} la ${fmtTime(new Date(b.end_time))}`,
+      })),
+      ...tasksRaw.map(t => ({
+        start: new Date(t.start_time), end: new Date(t.end_time),
+        label: t.title,
+      })),
+    ].sort((a, b) => a.start - b.start);
+
+    if (items.length === 0){
+      listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nimic programat în următoarele 14 zile.</p>`;
+      return;
+    }
+
+    listEl.innerHTML = items.map(it => `
+      <div class="upcoming-item ${isPastItem(it.end) ? 'past-item' : ''}">
+        <div class="upcoming-when">${fmtDateDDMMYYYY(it.start)}, ${fmtTime(it.start)}</div>
+        <div class="upcoming-label">${escapeHtml(it.label)}</div>
+      </div>
+    `).join('');
+  } catch (e){
+    listEl.innerHTML = `<p class="error-text">${isNetworkError(e) ? 'Fără conexiune — lista nu poate fi încărcată acum.' : 'Eroare: ' + escapeHtml(e.message || e)}</p>`;
+  }
+}
+
 function renderHoursRows(){
   const note = document.getElementById('hoursSetupNote');
   note.innerHTML = state.weekdayHoursMissingTable ? `
@@ -3747,6 +4057,116 @@ async function openAddModal(){
   } catch (e){ showModalError('Eroare la încărcarea datelor: ' + (e.message || e)); }
   renderServiceOptions();
   resetClientPickerUI('add');
+}
+
+/* ====================== MODAL: SARCINĂ NOUĂ / ALTĂ ACTIVITATE ====================== */
+function ensureNewTaskModal(){
+  if (document.getElementById('newTaskModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="newTaskModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Sarcină nouă / Altă activitate</div>
+        <button class="icon-btn" id="closeNewTaskModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div id="newTaskSetupNote"></div>
+        <div class="field">
+          <label for="taskTitle">Titlu / Descriere</label>
+          <input type="text" id="taskTitle" placeholder="ex: Ridicat comandă produse" />
+        </div>
+        <div class="field">
+          <label for="taskDate">Dată</label>
+          <input type="date" id="taskDate" />
+        </div>
+        <div class="wd-times" style="margin-top:6px;">
+          <input type="time" class="time-input" id="taskStart" />
+          <span class="wd-sep">–</span>
+          <input type="time" class="time-input" id="taskEnd" />
+        </div>
+        <p class="error-text hidden" id="newTaskError"></p>
+        <button class="btn-primary" id="saveNewTaskBtn" style="margin-top:14px;">Salvează sarcina</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('newTaskModal'));
+  document.getElementById('closeNewTaskModal').addEventListener('click', () => document.getElementById('newTaskModal').close());
+  document.getElementById('saveNewTaskBtn').addEventListener('click', saveNewTask);
+}
+
+async function openNewTaskModal(){
+  ensureNewTaskModal();
+  const dlg = document.getElementById('newTaskModal');
+  if (dlg.open) return;
+
+  document.getElementById('taskTitle').value = '';
+  document.getElementById('taskDate').value = ymd(state.selectedDay);
+  document.getElementById('taskStart').value = '';
+  document.getElementById('taskEnd').value = '';
+  document.getElementById('newTaskError').classList.add('hidden');
+
+  const note = document.getElementById('newTaskSetupNote');
+  const saveBtn = document.getElementById('saveNewTaskBtn');
+  const tasksOk = await customTasksTableExists();
+  state.customTasksTableOk = tasksOk;
+  note.innerHTML = tasksOk ? '' : `
+    <div class="setup-note">
+      Tabelul pentru sarcini custom nu există încă în Supabase. Rulează o singură dată acest SQL în
+      <strong>Supabase → SQL Editor</strong>, apoi revino aici ca să poți adăuga sarcini.
+      <pre>${escapeHtml(CUSTOM_TASKS_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyTaskSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  `;
+  saveBtn.disabled = !tasksOk;
+  if (!tasksOk){
+    document.getElementById('copyTaskSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(CUSTOM_TASKS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
+
+  dlg.showModal();
+}
+
+async function saveNewTask(){
+  const errEl = document.getElementById('newTaskError');
+  errEl.classList.add('hidden');
+  if (!state.employee) return;
+
+  const title = document.getElementById('taskTitle').value.trim();
+  const dateVal = document.getElementById('taskDate').value;
+  const startVal = document.getElementById('taskStart').value;
+  const endVal = document.getElementById('taskEnd').value;
+
+  if (!title){ errEl.textContent = 'Introdu un titlu.'; errEl.classList.remove('hidden'); return; }
+  if (!dateVal || !startVal || !endVal){ errEl.textContent = 'Completează data și orele de început/sfârșit.'; errEl.classList.remove('hidden'); return; }
+  if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ errEl.textContent = 'Ora de sfârșit trebuie să fie după cea de început.'; errEl.classList.remove('hidden'); return; }
+
+  const [yy, mm, dd] = dateVal.split('-').map(Number);
+  const [sh, sm] = startVal.split(':').map(Number);
+  const [eh, em] = endVal.split(':').map(Number);
+  const start = new Date(yy, mm - 1, dd, sh, sm);
+  const end = new Date(yy, mm - 1, dd, eh, em);
+
+  const btn = document.getElementById('saveNewTaskBtn');
+  btn.disabled = true; btn.textContent = 'Se salvează…';
+  const toastId = showToast('Se salvează…', 'saving', { persist: true });
+  try {
+    await createCustomTask({ employeeId: state.employee.id, title, start, end });
+    cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end });
+    if (isSameDay(start, state.selectedDay)) renderDayFromCache();
+    updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
+    document.getElementById('newTaskModal').close();
+    // Reconciliem cu rândul real din Supabase (id-ul corect), fără să blocăm UI-ul.
+    forceRefreshCache().then(() => { if (isSameDay(start, state.selectedDay)) renderDayFromCache(); });
+  } catch (e){
+    updateToast(toastId, 'Eroare la salvare: ' + (e.message || e), 'error', 3200);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvează sarcina';
+  }
 }
 
 async function refreshSlots(){
