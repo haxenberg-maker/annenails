@@ -141,10 +141,11 @@
   }
 
   /* ---------- BOARD: mini calendar + agenda ---------- */
-  .board{ display:grid; grid-template-columns:1fr; gap:18px; padding:18px; box-sizing:border-box; width:100%; }
+  .board{ display:grid; grid-template-columns:1fr; gap:18px; padding:18px; box-sizing:border-box; width:100%; height:auto !important; }
   @media (min-width:780px){
     .board{ grid-template-columns:320px 1fr; align-items:start; }
   }
+  #agendaPanel{ width:100%; height:auto !important; overflow-y:visible !important; flex:none !important; }
   .panel{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
     padding:18px; box-shadow:var(--shadow); box-sizing:border-box; width:100%;
@@ -201,12 +202,27 @@
      schimbarea dimensiunii panoului. */
   #dayContent{ min-height:320px; }
 
+  /* Containment strict — butoanele/textele din cardul de programare nu mai
+     pot împinge layout-ul în lateral, indiferent de conținut. */
+  #app, .board, .panel, .appt-card, .appt-card *{
+    box-sizing:border-box !important; max-width:100% !important;
+  }
+
   .appt-card{
-    display:flex; gap:14px; align-items:flex-start; background:var(--bg);
+    display:flex; flex-direction:column; background:var(--bg);
     border:1px solid var(--border); border-left:4px solid var(--accent);
     border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px; cursor:pointer;
+    width:100% !important; min-width:0 !important; overflow:hidden;
+    word-break:break-word; overflow-wrap:anywhere;
   }
   .appt-card:hover{ box-shadow:0 4px 14px rgba(43,33,31,.08); }
+  /* Zona de sus: ora + numele clientei + serviciul, pe toată lățimea
+     cardului — nu mai concurează pe orizontală cu butoanele de acțiune. */
+  .appt-card-top{ display:flex; gap:14px; align-items:flex-start; flex:1; width:100%; min-width:0; }
+  /* Zona de jos: WhatsApp / Copiază / Anulează, toate pe o singură linie,
+     alineate la dreapta. */
+  .appt-actions-bar{ display:flex; flex-direction:row; gap:8px; justify-content:flex-end; margin-top:8px; }
+  .appt-actions-bar .reminder-actions{ flex-direction:row; margin-left:0; }
   .appt-time{
     flex:none; width:56px; font-family:var(--font-display); font-weight:600;
     font-size:15px; line-height:1.25; color:var(--accent-dark); padding-top:1px;
@@ -226,7 +242,6 @@
     background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
   }
   .appt-cancel:hover{ border-color:var(--accent); color:var(--accent); }
-  .appt-card .appt-cancel{ margin-left:8px; }
   .appt-card.cancelled{ opacity:.55; border-left-color:var(--muted) !important; }
   .appt-card.cancelled .appt-client, .appt-card.cancelled .appt-service{ text-decoration:line-through; }
 
@@ -523,6 +538,11 @@
   }
   .service-form-row{ display:flex; gap:10px; }
   .service-form-row .field{ flex:1; }
+  /* Rândul de date pentru concedii — coloană verticală, ca să nu iasă
+     casetele de dată în afara ecranului pe mobil îngust. */
+  .vacation-date-row{ display:flex; flex-direction:column; gap:8px; width:100%; }
+  .vacation-date-row .field{ width:100%; }
+  #vacStart, #vacEnd{ width:100% !important; max-width:100% !important; box-sizing:border-box !important; }
   .color-row{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
   .color-row input[type=color]{
     width:44px; height:38px; border:1px solid var(--border); border-radius:8px; padding:2px; background:var(--surface);
@@ -624,6 +644,7 @@ const DEFAULT_SERVICE_COLOR = '#9B2247';
 const PRESET_COLORS = ['#9B2247', '#4C7A5D', '#2E5F8A', '#B8860B', '#6B4E9C', '#C1553A'];
 const PENDING_APPTS_KEY = 'pending_appointments';
 const PENDING_CLIENTS_KEY = 'pending_clients';
+const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -1004,6 +1025,85 @@ window.addEventListener('offline', () => {
   updateConnDot();
   showToast('Fără conexiune — ce salvezi acum rămâne local și se trimite automat la reconectare.', 'warning', { persist: true, id: 'offlineBanner' });
 });
+
+/* ====================== NOTIFICĂRI LOCALE / MEMENTOURI ====================== */
+/** Câte minute înainte de o programare vrea utilizatoarea să fie anunțată
+ * (salvat local, per dispozitiv — nu în Supabase). */
+function getNotifLeadMinutes(){
+  const v = parseInt(localStorage.getItem(NOTIF_LEAD_KEY) || '30', 10);
+  return isNaN(v) ? 30 : v;
+}
+function setNotifLeadMinutes(minutes){
+  localStorage.setItem(NOTIF_LEAD_KEY, String(minutes));
+}
+
+/** Cere permisiunea browserului de a arăta notificări native. */
+async function enableNotifications(){
+  if (!('Notification' in window)){
+    showToast('Acest browser nu suportă notificări native.', 'error', { autoHide: 3000 });
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') showToast('Notificările sunt activate pe acest dispozitiv.', 'success', { autoHide: 2000 });
+    else showToast('Notificările au fost refuzate — le poți activa din setările browserului.', 'warning', { autoHide: 3400 });
+  } catch (e){
+    showToast('Eroare la activarea notificărilor: ' + (e.message || e), 'error', { autoHide: 3000 });
+  }
+  refreshNotifButtonLabel();
+}
+
+/** Actualizează textul butonului „Activează Notificări” după starea reală a permisiunii. */
+function refreshNotifButtonLabel(){
+  const btn = document.getElementById('enableNotifBtn');
+  if (!btn) return;
+  if (!('Notification' in window)){
+    btn.textContent = 'Notificări nesuportate pe acest browser';
+    btn.disabled = true;
+  } else if (Notification.permission === 'granted'){
+    btn.textContent = '✓ Notificări activate';
+    btn.disabled = true;
+  } else if (Notification.permission === 'denied'){
+    btn.textContent = 'Notificări blocate — schimbă din setările browserului';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Activează Notificări';
+    btn.disabled = false;
+  }
+}
+
+// Ținem minte care programări au primit deja notificarea, ca să nu o
+// repetăm la fiecare verificare din minutul respectiv.
+const notifiedApptIds = new Set();
+
+/** Rulează o dată pe minut: compară ora curentă cu ora programărilor de
+ * azi și, când timpul rămas ajunge la intervalul ales (notifLeadTime),
+ * arată o notificare nativă a browserului. Funcționează doar cât timp
+ * fila aplicației e deschisă (nu e o notificare push prin server). */
+function checkUpcomingAppointments(){
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!state.employee) return;
+  const leadMin = getNotifLeadMinutes();
+  const now = new Date();
+  cache.appointments
+    .filter(a => a.employeeId === state.employee.id && a.status !== 'cancelled' && isSameDay(a.startTime, now))
+    .forEach(a => {
+      const diffMin = Math.round((a.startTime.getTime() - now.getTime()) / 60000);
+      // Toleranță de un minut, ca o mică întârziere a timer-ului să nu
+      // sară exact peste momentul de anunțat.
+      if (diffMin <= leadMin && diffMin >= leadMin - 1 && !notifiedApptIds.has(a.id)){
+        notifiedApptIds.add(a.id);
+        try {
+          new Notification('Programare în curând!', {
+            body: `${a.clientName || 'Clientă'} — ${a.serviceName || 'programare'} la ${fmtTime(a.startTime)}`,
+            tag: `appt-${a.id}`,
+          });
+        } catch (e){ /* unele browsere mobile refuză Notification API în fundal — ignorăm */ }
+      }
+    });
+}
+
+setInterval(checkUpcomingAppointments, 60000);
 
 /* ====================== DATA LAYER ====================== */
 
@@ -1769,20 +1869,24 @@ function renderAppointmentList(vac){
     const color = cancelled ? 'var(--muted)' : unconfirmed ? 'var(--danger)' : a.serviceColor;
     return `
       <div class="appt-card ${cancelled ? 'cancelled' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
-        <div class="appt-time">${fmtTime(a.startTime)}<small>${fmtTime(a.endTime)}</small></div>
-        <div class="appt-body">
-          <div class="appt-client">${escapeHtml(a.clientName || 'Client')}</div>
-          <div class="appt-service"><span class="swatch" style="background:${color}"></span>${escapeHtml(a.serviceName || '')}</div>
-          ${cancelled ? `<span class="appt-tag">Anulată</span>` : ''}
-          ${completed ? `<span class="appt-tag" style="background:var(--success)">Finalizată</span>` : ''}
-          ${unconfirmed ? `<span class="appt-tag" style="background:var(--danger)">Neconfirmată</span>` : ''}
-          ${a.pendingOffline ? `<span class="appt-tag pending-tag">Offline — în așteptare</span>` : ''}
+        <div class="appt-card-top">
+          <div class="appt-time">${fmtTime(a.startTime)}<small>${fmtTime(a.endTime)}</small></div>
+          <div class="appt-body">
+            <div class="appt-client">${escapeHtml(a.clientName || 'Client')}</div>
+            <div class="appt-service"><span class="swatch" style="background:${color}"></span>${escapeHtml(a.serviceName || '')}</div>
+            ${cancelled ? `<span class="appt-tag">Anulată</span>` : ''}
+            ${completed ? `<span class="appt-tag" style="background:var(--success)">Finalizată</span>` : ''}
+            ${unconfirmed ? `<span class="appt-tag" style="background:var(--danger)">Neconfirmată</span>` : ''}
+            ${a.pendingOffline ? `<span class="appt-tag pending-tag">Offline — în așteptare</span>` : ''}
+          </div>
         </div>
-        ${(!cancelled && !a.pendingOffline) ? reminderActionsHtml(a) : ''}
         ${(!cancelled && !a.pendingOffline) ? `
+        <div class="appt-actions-bar">
+          ${reminderActionsHtml(a)}
           <button class="appt-cancel" data-id="${a.id}" title="Anulează programarea">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>` : ''}
+          </button>
+        </div>` : ''}
       </div>
     `;
   }).join('');
@@ -2062,7 +2166,7 @@ async function renderSettingsScreen(){
           <h2>Concedii &amp; Zile Libere</h2>
           <p class="settings-hint">Zilele în care nu lucrezi deloc — apar în calendar și blochează programările noi.</p>
           <div id="vacationsSetupNote"></div>
-          <div class="service-form-row">
+          <div class="vacation-date-row">
             <div class="field"><label for="vacStart">Data început</label><input id="vacStart" type="date" /></div>
             <div class="field"><label for="vacEnd">Data sfârșit</label><input id="vacEnd" type="date" /></div>
           </div>
@@ -2100,6 +2204,22 @@ async function renderSettingsScreen(){
           <button class="btn-primary" id="pwaInstallBtn">📲 Descarcă / Instalează aplicația pe telefon</button>
         </section>
 
+        <section class="panel settings-section">
+          <h2>Notificări &amp; Memento programări</h2>
+          <p class="settings-hint">Primești o notificare pe acest telefon/computer cu puțin timp înainte de o programare — cât timp ai fila aplicației deschisă.</p>
+          <div class="field">
+            <label for="notifLeadTime">Anunță-mă cu</label>
+            <select id="notifLeadTime">
+              <option value="15">15 minute înainte</option>
+              <option value="30">30 minute înainte</option>
+              <option value="60">1 oră înainte</option>
+              <option value="120">2 ore înainte</option>
+              <option value="1440">24 ore înainte</option>
+            </select>
+          </div>
+          <button class="btn-outline" id="enableNotifBtn" type="button">Activează Notificări</button>
+        </section>
+
       </div>
     </div>
     ${bottomNavHtml()}
@@ -2122,6 +2242,12 @@ async function renderSettingsScreen(){
       sw.classList.add('active');
     });
   });
+  document.getElementById('notifLeadTime').value = String(getNotifLeadMinutes());
+  document.getElementById('notifLeadTime').addEventListener('change', (e) => {
+    setNotifLeadMinutes(parseInt(e.target.value, 10) || 30);
+  });
+  document.getElementById('enableNotifBtn').addEventListener('click', enableNotifications);
+  refreshNotifButtonLabel();
   wireBottomNav();
   wirePwaInstallButton('pwaInstallBtn', 'pwaInstallSection');
 
