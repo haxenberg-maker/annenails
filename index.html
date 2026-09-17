@@ -37,7 +37,7 @@
     --font-body:'Work Sans', sans-serif;
   }
   *{ box-sizing:border-box; }
-  html,body{ height:100%; }
+  html,body{ height:100%; overflow-x:hidden !important; width:100%; max-width:100vw; }
   body{
     margin:0;
     background:var(--bg);
@@ -47,7 +47,7 @@
   }
   button{ font-family:inherit; cursor:pointer; }
   input, select, textarea{ font-family:inherit; }
-  #app{ max-width:480px; margin:0 auto; min-height:100%; position:relative; padding-bottom:100px; }
+  #app{ max-width:480px; margin:0 auto; min-height:100%; position:relative; padding-bottom:100px; overflow-x:hidden !important; width:100%; }
   @media (min-width:780px){
     #app{ max-width:940px; }
   }
@@ -116,19 +116,19 @@
   /* ---------- HEADER ---------- */
   header.top{
     position:sticky; top:0; z-index:5; background:var(--bg);
-    padding:18px 18px 14px 18px; border-bottom:1px solid var(--border);
+    padding:8px 14px; font-size:16px; border-bottom:1px solid var(--border);
   }
   .top-row{ display:flex; align-items:center; justify-content:space-between; }
   .brand{ display:flex; flex-direction:column; }
   .brand-title-row{ display:flex; align-items:center; gap:7px; }
-  .brand-title{ font-family:var(--font-display); font-weight:600; font-size:20px; }
-  .conn-dot{ width:9px; height:9px; border-radius:50%; background:var(--success); flex:none; }
+  .brand-title{ font-family:var(--font-display); font-weight:600; font-size:16px; }
+  .conn-dot{ width:8px; height:8px; border-radius:50%; background:var(--success); flex:none; }
   .conn-dot.offline{ background:var(--warn); }
   .brand-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:1px; }
-  .header-actions{ display:flex; gap:8px; }
+  .header-actions{ display:flex; gap:6px; }
   .icon-btn{
     position:relative;
-    width:36px; height:36px; border-radius:50%; border:1px solid var(--border);
+    width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
     background:var(--surface); display:flex; align-items:center; justify-content:center;
     color:var(--ink-soft);
   }
@@ -328,6 +328,7 @@
     top:50%; left:50%; right:auto; bottom:auto; margin:0;
     transform:translate(-50%, -50%);
     border-radius:var(--radius-lg); box-shadow:var(--shadow); max-height:88vh;
+    box-sizing:border-box; touch-action:manipulation;
   }
   dialog::backdrop{ background:rgba(43,33,31,0.45); }
   dialog[open]{
@@ -345,6 +346,13 @@
   .sheet-title{ font-family:var(--font-display); font-weight:600; font-size:19px; }
   .sheet-body{ padding:16px 18px; overflow-y:auto; flex:1; }
   .sheet-footer{ padding:14px 18px 20px 18px; border-top:1px solid var(--border); flex:none; }
+
+  /* Modalul „Programare nouă” păstrează o dimensiune FIXĂ, indiferent dacă
+     sloturile orare sunt încărcate, ascunse sau selectate — doar conținutul
+     din interior derulează (.sheet-body are overflow-y:auto). */
+  #addModal{
+    height:82vh; max-height:600px; display:flex; flex-direction:column;
+  }
 
   .field select{
     width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
@@ -381,6 +389,9 @@
   }
   .slots-label{ font-size:13.5px; color:var(--ink-soft); margin:4px 0 10px 0; }
   .slots-wrap{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
+  /* Zonă cu înălțime minimă fixă, ca modalul „Programare nouă” să nu-și
+     schimbe dimensiunea când sloturile apar/dispar/se selectează. */
+  .slots-area{ min-height:180px; }
   .slot-btn{
     width:100%; display:flex; align-items:center; gap:9px; text-align:left;
     padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
@@ -430,22 +441,27 @@
   .settings-section h2{ font-family:var(--font-display); font-weight:600; font-size:17px; margin:0 0 4px 0; }
   .settings-section .settings-hint{ font-size:13px; color:var(--ink-soft); margin:0 0 14px 0; }
   .wd-row{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:10px 0; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;
   }
   .wd-row:last-child{ border-bottom:none; }
-  .wd-label{ flex:none; width:96px; font-weight:600; font-size:13.5px; }
+  .wd-label{ flex:1 1 80px; min-width:64px; max-width:100%; font-weight:600; font-size:13.5px; }
   .wd-date{ display:block; font-weight:400; font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
-  .wd-times{ display:flex; align-items:center; gap:6px; flex:1; justify-content:flex-end; }
+  .wd-times{ display:flex; align-items:center; gap:6px; flex:2 1 190px; justify-content:flex-end; flex-wrap:wrap; max-width:100%; }
   .time-input{
     padding:8px 9px; border:1px solid var(--border); border-radius:8px;
-    font-size:13.5px; width:98px; color:var(--ink); background:var(--surface);
+    font-size:13.5px; width:90px; max-width:40vw; min-width:70px; color:var(--ink); background:var(--surface);
   }
   .time-input:disabled{ background:var(--bg); color:var(--muted); }
-  .wd-sep{ color:var(--ink-soft); font-size:12px; }
+  .wd-sep{ color:var(--ink-soft); font-size:12px; flex:none; }
   .wd-off{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); flex:none; }
-  .wd-off input{ width:15px; height:15px; }
-  .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .wd-off input{ width:15px; height:15px; flex:none; }
+  @media (max-width:380px){
+    .wd-row{ flex-direction:column; align-items:flex-start; }
+    .wd-times{ width:100%; justify-content:flex-start; }
+  }
+  .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:8px; flex-wrap:wrap; }
+  .week-nav .btn-outline{ flex:1 1 auto; min-width:0; white-space:nowrap; }
   .week-range{ font-family:var(--font-display); font-weight:600; font-size:15px; }
   .setup-note{
     background:var(--bg); border-left:3px solid var(--accent); border-radius:8px;
@@ -1439,24 +1455,11 @@ function renderAppShell(){
     <div id="app">
       <header class="top">
         <div class="top-row">
-          <div class="brand">
-            <div class="brand-title-row">
-              <span class="conn-dot" id="connDot"></span>
-              <span class="brand-title">Programări Unghii</span>
-            </div>
-            <div class="brand-sub" id="employeeSub">Se încarcă…</div>
+          <div class="brand-title-row">
+            <span class="conn-dot" id="connDot"></span>
+            <span class="brand-title">Programări</span>
           </div>
           <div class="header-actions">
-            <button class="icon-btn" id="modelsBtn" title="Modele">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13 21l-8-8 7.59-7.59A2 2 0 0 1 14 5h5a2 2 0 0 1 2 2v5a2 2 0 0 1-.41 1.41z"/><circle cx="16.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>
-            </button>
-            <button class="icon-btn" id="clientsBtn" title="Cliente">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </button>
-            <button class="icon-btn" id="unconfirmedBtn" title="Programări neconfirmate">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              <span class="badge-count hidden" id="unconfirmedBadge">0</span>
-            </button>
             <button class="icon-btn" id="settingsBtn" title="Setări">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -1494,9 +1497,6 @@ function renderAppShell(){
   `;
 
   document.getElementById('logoutBtn').addEventListener('click', () => sb.auth.signOut());
-  document.getElementById('modelsBtn').addEventListener('click', goModels);
-  document.getElementById('clientsBtn').addEventListener('click', goClients);
-  document.getElementById('unconfirmedBtn').addEventListener('click', openUnconfirmedModal);
   document.getElementById('settingsBtn').addEventListener('click', goSettings);
   document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
   document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
@@ -2063,6 +2063,12 @@ async function renderSettingsScreen(){
           <button class="btn-outline" id="goModelsFromSettings">Deschide pagina Modele →</button>
         </section>
 
+        <section class="panel settings-section">
+          <h2>Cliente</h2>
+          <p class="settings-hint" style="margin-bottom:12px;">Vezi, editează sau șterge clientele salvate.</p>
+          <button class="btn-outline" id="goClientsFromSettings">Deschide pagina Cliente →</button>
+        </section>
+
         <section class="panel settings-section" id="pwaInstallSection" style="display:none;">
           <h2>Aplicație pe telefon</h2>
           <p class="settings-hint">Instalează „Programări Unghii” pe ecranul principal, ca o aplicație nativă — se deschide instant, fără browser.</p>
@@ -2076,6 +2082,7 @@ async function renderSettingsScreen(){
 
   document.getElementById('backBtn').addEventListener('click', goCalendar);
   document.getElementById('goModelsFromSettings').addEventListener('click', goModels);
+  document.getElementById('goClientsFromSettings').addEventListener('click', goClients);
   document.getElementById('prevWeekBtn').addEventListener('click', () => changeSettingsWeek(-1));
   document.getElementById('nextWeekBtn').addEventListener('click', () => changeSettingsWeek(1));
   document.getElementById('saveHoursBtn').addEventListener('click', saveHours);
@@ -3348,11 +3355,13 @@ function ensureModal(){
           <select id="serviceSelect"><option value="">Alege serviciul…</option></select>
         </div>
         ${clientPickerHtml('add')}
-        <div id="slotsSection" class="hidden">
-          <div class="slots-label">Alege ora</div>
-          <div class="slots-wrap" id="slotsWrap"></div>
+        <div id="slotsArea" class="slots-area">
+          <div id="slotsSection" class="hidden">
+            <div class="slots-label">Alege ora</div>
+            <div class="slots-wrap" id="slotsWrap"></div>
+          </div>
+          <p class="hint-text" id="slotsHint">Alege mai întâi un serviciu ca să vezi orele libere.</p>
         </div>
-        <p class="hint-text" id="slotsHint">Alege mai întâi un serviciu ca să vezi orele libere.</p>
       </div>
       <div class="sheet-footer">
         <p class="error-text hidden" id="modalError"></p>
