@@ -4,10 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Programări Unghii</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="manifest" href="manifest.json">
- <meta name="theme-color" content="#8A1C41">
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -500,11 +496,8 @@
     display:flex; align-items:center; gap:6px; justify-content:flex-start;
     flex-wrap:nowrap; flex:none; width:auto; margin-top:6px;
   }
-  #weekRows .time-input{
-    width:150px;
-    max-width:150px;
-    min-width:150px;
-  }  .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:8px; flex-wrap:wrap; }
+  #weekRows .time-input{ width:84px; max-width:none; min-width:0; }
+  .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:8px; flex-wrap:wrap; }
   .week-nav .btn-outline{ flex:1 1 auto; min-width:0; white-space:nowrap; }
   .week-range{ font-family:var(--font-display); font-weight:600; font-size:15px; }
   .setup-note{
@@ -652,6 +645,9 @@ const PRESET_COLORS = ['#9B2247', '#4C7A5D', '#2E5F8A', '#B8860B', '#6B4E9C', '#
 const PENDING_APPTS_KEY = 'pending_appointments';
 const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
+// Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
+// Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -1040,11 +1036,65 @@ function getNotifLeadMinutes(){
   const v = parseInt(localStorage.getItem(NOTIF_LEAD_KEY) || '30', 10);
   return isNaN(v) ? 30 : v;
 }
-function setNotifLeadMinutes(minutes){
+/** Salvează intervalul local (pentru UI-ul imediat) ȘI pe employees.notif_lead_minutes
+ * în Supabase, fiindcă funcția server-side care trimite push-urile citește de acolo,
+ * nu din localStorage-ul acestui dispozitiv. */
+async function setNotifLeadMinutes(minutes){
   localStorage.setItem(NOTIF_LEAD_KEY, String(minutes));
+  if (!state.employee) return;
+  try {
+    const { error } = await sb.from('employees')
+      .update({ notif_lead_minutes: minutes })
+      .eq('id', state.employee.id);
+    if (error) throw error;
+    state.employee.notif_lead_minutes = minutes;
+  } catch (e){
+    showToast('Nu am putut salva intervalul pe server: ' + (e.message || e), 'error', { autoHide: 3000 });
+  }
 }
 
-/** Cere permisiunea browserului de a arăta notificări native. */
+/** Convertește cheia publică VAPID (base64url) în Uint8Array, cum cere PushManager. */
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+/** Abonează acest dispozitiv la Push API și salvează abonamentul în Supabase,
+ * legat de angajata curentă, ca să-l poată folosi funcția server-side de trimitere. */
+async function subscribeToPush(){
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY === 'PUNE_AICI_CHEIA_PUBLICA_VAPID'){
+    showToast('Cheia VAPID nu e configurată încă — notificările vor funcționa doar cât timp fila e deschisă.', 'warning', { autoHide: 4000 });
+    return;
+  }
+  if (!state.employee){ return; }
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription){
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = subscription.toJSON();
+    const { error } = await sb.from('push_subscriptions').upsert({
+      employee_id: state.employee.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      user_agent: navigator.userAgent,
+    }, { onConflict: 'endpoint' });
+    if (error) throw error;
+  } catch (e){
+    showToast('Nu am putut activa notificările în fundal: ' + (e.message || e), 'error', { autoHide: 3600 });
+  }
+}
+
+/** Cere permisiunea browserului de a arăta notificări native și abonează
+ * dispozitivul la Web Push, ca notificările să ajungă și cu aplicația închisă. */
 async function enableNotifications(){
   if (!('Notification' in window)){
     showToast('Acest browser nu suportă notificări native.', 'error', { autoHide: 3000 });
@@ -1052,8 +1102,12 @@ async function enableNotifications(){
   }
   try {
     const perm = await Notification.requestPermission();
-    if (perm === 'granted') showToast('Notificările sunt activate pe acest dispozitiv.', 'success', { autoHide: 2000 });
-    else showToast('Notificările au fost refuzate — le poți activa din setările browserului.', 'warning', { autoHide: 3400 });
+    if (perm === 'granted'){
+      showToast('Notificările sunt activate pe acest dispozitiv.', 'success', { autoHide: 2000 });
+      await subscribeToPush();
+    } else {
+      showToast('Notificările au fost refuzate — le poți activa din setările browserului.', 'warning', { autoHide: 3400 });
+    }
   } catch (e){
     showToast('Eroare la activarea notificărilor: ' + (e.message || e), 'error', { autoHide: 3000 });
   }
@@ -1111,6 +1165,59 @@ function checkUpcomingAppointments(){
 }
 
 setInterval(checkUpcomingAppointments, 60000);
+
+const NOTIF_STATUS_LABELS = {
+  pending: { text: 'Programată', color: 'var(--warn, #B8860B)' },
+  sent: { text: 'Trimisă', color: 'var(--success, #4C7A5D)' },
+  missed: { text: 'Ratată', color: 'var(--danger, #C1553A)' },
+  cancelled: { text: 'Anulată', color: 'var(--muted, #999)' },
+};
+
+/** Citește scheduled_notifications pentru angajata curentă (join cu appointments,
+ * clients, services) și randează un rezumat pending/sent/missed în Setări. */
+async function loadNotificationStatusPanel(){
+  const container = document.getElementById('notifStatusList');
+  if (!container) return;
+  if (!state.employee){ container.innerHTML = ''; return; }
+  container.innerHTML = '<div class="settings-hint">Se încarcă...</div>';
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await sb
+      .from('scheduled_notifications')
+      .select('id, status, scheduled_send_at, sent_at, appointments(start_time, clients(name), services(name))')
+      .eq('employee_id', state.employee.id)
+      .gte('scheduled_send_at', since)
+      .order('scheduled_send_at', { ascending: true })
+      .limit(30);
+    if (error) throw error;
+
+    if (!data || data.length === 0){
+      container.innerHTML = '<div class="settings-hint">Nu există notificări programate în intervalul recent.</div>';
+      return;
+    }
+
+    container.innerHTML = data.map((row) => {
+      const appt = row.appointments;
+      const label = NOTIF_STATUS_LABELS[row.status] || { text: row.status, color: 'var(--muted, #999)' };
+      const clientName = appt && appt.clients ? appt.clients.name : 'Clientă';
+      const serviceName = appt && appt.services ? appt.services.name : '';
+      const apptTime = appt ? fmtTime(new Date(appt.start_time)) : '';
+      const apptDate = appt ? fmtDateDDMMYYYY(new Date(appt.start_time)) : '';
+      const sendAt = fmtTime(new Date(row.scheduled_send_at));
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border, #eee); border-radius:8px;">
+          <div>
+            <div style="font-weight:600;">${escapeHtml(clientName)} — ${escapeHtml(serviceName)}</div>
+            <div class="settings-hint" style="margin:2px 0 0;">Programare: ${apptDate} ${apptTime} · Trimitere: ${sendAt}</div>
+          </div>
+          <span style="background:${label.color}; color:#fff; font-size:12px; padding:3px 9px; border-radius:999px; white-space:nowrap;">${label.text}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (e){
+    container.innerHTML = `<div class="settings-hint">Nu am putut încărca statusul: ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
 
 /* ====================== DATA LAYER ====================== */
 
@@ -1718,14 +1825,8 @@ function setDay(d){
 
 /* ====================== MINI CALENDAR ====================== */
 function renderCalendar(){
-  const calMonthLabel = document.getElementById('calMonthLabel');
-  if (calMonthLabel) {
-    calMonthLabel.textContent = fmtMonthHeader(state.calendarMonth);
-  }
-
+  document.getElementById('calMonthLabel').textContent = fmtMonthHeader(state.calendarMonth);
   const grid = document.getElementById('calGrid');
-  if (!grid) return;
-
   const y = state.calendarMonth.getFullYear();
   const m = state.calendarMonth.getMonth();
   const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7;
@@ -2219,7 +2320,7 @@ async function renderSettingsScreen(){
 
         <section class="panel settings-section">
           <h2>Notificări &amp; Memento programări</h2>
-          <p class="settings-hint">Primești o notificare pe acest telefon/computer cu puțin timp înainte de o programare — cât timp ai fila aplicației deschisă.</p>
+          <p class="settings-hint">Primești o notificare cu puțin timp înainte de o programare — inclusiv cu telefonul blocat sau aplicația închisă, odată activată.</p>
           <div class="field">
             <label for="notifLeadTime">Anunță-mă cu</label>
             <select id="notifLeadTime">
@@ -2231,6 +2332,13 @@ async function renderSettingsScreen(){
             </select>
           </div>
           <button class="btn-outline" id="enableNotifBtn" type="button">Activează Notificări</button>
+
+          <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border, #eee);">
+            <h3 style="margin:0 0 6px;">Status notificări programate</h3>
+            <p class="settings-hint" style="margin-bottom:10px;">Programate (pending), trimise (sent) sau ratate (missed) pentru programările tale viitoare.</p>
+            <button class="btn-outline" id="refreshNotifStatusBtn" type="button">🔄 Actualizează statusul</button>
+            <div id="notifStatusList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
         </section>
 
       </div>
@@ -2255,12 +2363,16 @@ async function renderSettingsScreen(){
       sw.classList.add('active');
     });
   });
-  document.getElementById('notifLeadTime').value = String(getNotifLeadMinutes());
+  document.getElementById('notifLeadTime').value = String(
+    (state.employee && state.employee.notif_lead_minutes) || getNotifLeadMinutes()
+  );
   document.getElementById('notifLeadTime').addEventListener('change', (e) => {
     setNotifLeadMinutes(parseInt(e.target.value, 10) || 30);
   });
   document.getElementById('enableNotifBtn').addEventListener('click', enableNotifications);
+  document.getElementById('refreshNotifStatusBtn').addEventListener('click', loadNotificationStatusPanel);
   refreshNotifButtonLabel();
+  loadNotificationStatusPanel();
   wireBottomNav();
   wirePwaInstallButton('pwaInstallBtn', 'pwaInstallSection');
 
@@ -2904,28 +3016,22 @@ async function loadWeekRows(){
           <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
           <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
         </div>
-          <div class="wd-times">
-          <select class="time-input wk-shift" ${off ? 'disabled' : ''}>
-            <option value="">Alege programul</option>
-            <option value="08:00|12:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '12:30' ? 'selected' : ''}>08:00 - 12:30</option>
-            <option value="08:00|13:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '13:00' ? 'selected' : ''}>08:00 - 13:00</option>
-            <option value="12:30|21:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '12:30' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:00' ? 'selected' : ''}>12:30 - 21:00</option>
-            <option value="13:00|21:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '13:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:30' ? 'selected' : ''}>13:00 - 21:30</option>
-
-          </select>
-         </div>
+        <div class="wd-times">
+          <input type="time" class="time-input wk-start" value="${existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
+          <span class="wd-sep">–</span>
+          <input type="time" class="time-input wk-end" value="${existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
+        </div>
       </div>
     `;
   }).join('');
 
   wrap.querySelectorAll('.wd-row').forEach(row => {
     const offCb = row.querySelector('.wk-off');
-    const shiftSelect = row.querySelector('.wk-shift');
+    const startInp = row.querySelector('.wk-start');
+    const endInp = row.querySelector('.wk-end');
     offCb.addEventListener('change', () => {
-      shiftSelect.disabled = offCb.checked;
-    
-      if (offCb.checked){
-        shiftSelect.value = ''; }
+      startInp.disabled = offCb.checked; endInp.disabled = offCb.checked;
+      if (offCb.checked){ startInp.value = ''; endInp.value = ''; }
     });
   });
 }
@@ -2946,11 +3052,8 @@ async function saveWeek(){
     const [yy, mm, dd] = dateKey.split('-').map(Number);
     const day = new Date(yy, mm - 1, dd);
     const off = row.querySelector('.wk-off').checked;
-    const shiftSelect = row.querySelector('.wk-shift');
-   const shiftValue = shiftSelect ? shiftSelect.value : ''; 
-   let startVal = '';
-   let endVal = ''; 
-   if (shiftValue) { [startVal, endVal] = shiftValue.split('|'); }
+    const startVal = row.querySelector('.wk-start').value;
+    const endVal = row.querySelector('.wk-end').value;
     try {
       if (off || !startVal || !endVal){ await clearDayJobBlock(state.employee.id, day); continue; }
       if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ problems.push(`${fmtDateShort(day)}: ora de sfârșit trebuie să fie după cea de început.`); continue; }
@@ -4122,6 +4225,12 @@ async function bootstrapApp(){
   try { const employees = await getEmployees(); state.employee = employees[0] || null; }
   catch (e){ state.employee = null; }
 
+  // Dacă notificările erau deja permise dintr-o sesiune anterioară, ne asigurăm
+  // că abonamentul push e salvat pentru angajata curentă (abia acum știută).
+  if (state.employee && 'Notification' in window && Notification.permission === 'granted'){
+    subscribeToPush();
+  }
+
   if (state.employee){
     try {
       const { map, missingTable } = await getWeekdayHours(state.employee.id);
@@ -4189,36 +4298,18 @@ function injectPwaManifest(){
   } catch (e){ /* manifest opțional — aplicația funcționează și fără el */ }
 }
 
-/** Service Worker minimal, injectat ca Blob (fără fișier sw.js separat):
- * pune în cache shell-ul aplicației la instalare, pentru redeschidere offline. */
-function registerInlineServiceWorker(){
+/** Înregistrează fișierul static /sw.js (livrat de Netlify de lângă index.html).
+ * Spre deosebire de vechiul Service Worker injectat ca Blob, acesta poate primi
+ * evenimente `push` trimise de server chiar cu aplicația închisă sau telefonul blocat. */
+function registerServiceWorker(){
   if (!('serviceWorker' in navigator)) return;
-  const swSource = `
-    const CACHE_NAME = 'unghii-app-shell-v1';
-    self.addEventListener('install', (event) => {
-      self.skipWaiting();
-      event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.add(self.registration.scope).catch(() => {}))
-      );
-    });
-    self.addEventListener('activate', (event) => {
-      event.waitUntil(self.clients.claim());
-    });
-    self.addEventListener('fetch', (event) => {
-      if (event.request.method !== 'GET') return;
-      event.respondWith(
-        caches.open(CACHE_NAME).then((cache) =>
-          fetch(event.request).then((networkResp) => {
-            cache.put(event.request, networkResp.clone());
-            return networkResp;
-          }).catch(() => cache.match(event.request))
-        )
-      );
-    });
-  `;
-  const blob = new Blob([swSource], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl).catch(() => { /* offline install e opțional, ignorăm eroarea */ });
+  navigator.serviceWorker.register('/sw.js').then((registration) => {
+    // Dacă utilizatoarea a activat deja notificările într-o sesiune anterioară,
+    // re-confirmăm abonamentul (de ex. dacă browserul l-a reînnoit).
+    if ('Notification' in window && Notification.permission === 'granted'){
+      subscribeToPush();
+    }
+  }).catch(() => { /* offline install e opțional, ignorăm eroarea */ });
 }
 
 /** Afișează discret butonul „Descarcă / Instalează aplicația” în Setări,
@@ -4254,7 +4345,7 @@ window.addEventListener('appinstalled', () => {
 });
 
 injectPwaManifest();
-registerInlineServiceWorker();
+registerServiceWorker();
 
 sb.auth.onAuthStateChange((_event, session) => {
   const wasLoggedIn = !!state.session;
