@@ -1715,8 +1715,14 @@ function setDay(d){
 
 /* ====================== MINI CALENDAR ====================== */
 function renderCalendar(){
-  document.getElementById('calMonthLabel').textContent = fmtMonthHeader(state.calendarMonth);
+  const calMonthLabel = document.getElementById('calMonthLabel');
+  if (calMonthLabel) {
+    calMonthLabel.textContent = fmtMonthHeader(state.calendarMonth);
+  }
+
   const grid = document.getElementById('calGrid');
+  if (!grid) return;
+
   const y = state.calendarMonth.getFullYear();
   const m = state.calendarMonth.getMonth();
   const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7;
