@@ -349,10 +349,11 @@
 
   /* Modalul „Programare nouă” păstrează o dimensiune FIXĂ, indiferent dacă
      sloturile orare sunt încărcate, ascunse sau selectate — doar conținutul
-     din interior derulează (.sheet-body are overflow-y:auto). */
-  #addModal{
-    height:82vh; max-height:600px; display:flex; flex-direction:column;
-  }
+     din interior derulează (.sheet-body are overflow-y:auto).
+     IMPORTANT: regula de display trebuie scopată la [open], altfel
+     suprascrie display:none implicit al <dialog> și rămâne mereu vizibil. */
+  #addModal{ height:82vh; max-height:600px; }
+  #addModal[open]{ display:flex; flex-direction:column; }
 
   .field select{
     width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
