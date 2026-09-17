@@ -29,6 +29,7 @@
     --info:#2E5F8A;
     --job-block:#8C7B74;
     --job-block-soft:#EDE7E3;
+    --danger:#D93838;
     --radius-lg:22px;
     --radius-md:14px;
     --radius-sm:9px;
@@ -162,21 +163,22 @@
   }
   .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
   .cal-cell{
-    position:relative; aspect-ratio:1/1; border:none; background:none; border-radius:50%;
+    position:relative; aspect-ratio:1/1 !important; border:none; background:none; border-radius:50%;
     display:flex; align-items:center; justify-content:center; font-size:13.5px; color:var(--ink);
-    box-sizing:border-box; padding:0; margin:0; /* nicio schimbare de cutie la selectare/hover */
+    box-sizing:border-box !important; padding:0; margin:0; overflow:hidden; /* nicio schimbare de cutie la selectare/hover */
   }
   .cal-cell.empty{ pointer-events:none; }
   .cal-cell:not(.empty):hover{ background:var(--accent-soft); }
-  .cal-cell.today .cal-daynum{ font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+  .cal-cell.today .cal-daynum{ box-shadow:inset 0 0 0 2px var(--accent); border-radius:50%; }
   .cal-cell.selected{ background:var(--accent); border:none; }
-  .cal-cell.selected .cal-daynum{ color:#fff; font-weight:700; }
-  /* Container cu dimensiune FIXĂ pentru cifra zilei, ca „bold” (today/selected)
-     să nu schimbe lățimea textului și să provoace un mic „jump” vizual. */
+  .cal-cell.selected .cal-daynum{ color:#fff; }
+  /* Container cu dimensiune FIXĂ pentru cifra zilei, ca „bold”/contur (today/selected)
+     să nu schimbe lățimea textului și să provoace un mic „jump” vizual — greutatea
+     fontului e uniformă (600) în toate stările. */
   .cal-daynum{
     display:flex; align-items:center; justify-content:center;
     width:26px; height:26px; box-sizing:border-box;
-    font-variant-numeric:tabular-nums; line-height:1;
+    font-variant-numeric:tabular-nums; line-height:1; font-weight:600;
   }
   .cal-lines{
     position:absolute; bottom:4px; left:15%; right:15%; height:3px;
@@ -220,11 +222,12 @@
     background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
   }
   .appt-cancel:hover{ border-color:var(--accent); color:var(--accent); }
+  .appt-card .appt-cancel{ margin-left:8px; }
   .appt-card.cancelled{ opacity:.55; border-left-color:var(--muted) !important; }
   .appt-card.cancelled .appt-client, .appt-card.cancelled .appt-service{ text-decoration:line-through; }
 
   /* ---------- Reamintire: Copiază mesaj + WhatsApp ---------- */
-  .reminder-actions{ display:flex; flex-direction:column; gap:6px; flex:none; }
+  .reminder-actions{ display:flex; flex-direction:column; gap:6px; flex:none; margin-left:8px; }
   .reminder-btn{
     width:30px; height:30px; border-radius:50%; border:1px solid var(--border);
     background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
@@ -233,7 +236,7 @@
   .reminder-copy-btn:hover{ border-color:var(--accent); color:var(--accent); }
   .reminder-wa-btn{ border-color:#25D36655; color:#25D366; }
   .reminder-wa-btn:hover{ border-color:#25D366; background:#25D36618; }
-  .unconf-card .reminder-actions{ flex-direction:row; margin-top:8px; }
+  .unconf-card .reminder-actions{ flex-direction:row; margin-top:8px; margin-bottom:12px; margin-left:0; }
 
   .block-card{
     display:flex; gap:14px; align-items:flex-start; background:var(--job-block-soft);
@@ -461,6 +464,20 @@
     .wd-row{ flex-direction:column; align-items:flex-start; }
     .wd-times{ width:100%; justify-content:flex-start; }
   }
+  /* ---------- Compactare specifică „Programul de la celălalt job” (#weekRows) ---------- */
+  #weekRows .wd-row{
+    display:block; padding:8px 0; flex-wrap:nowrap;
+  }
+  #weekRows .wd-row-top{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  #weekRows .wd-label{ flex:1 1 auto; min-width:0; max-width:none; }
+  #weekRows .wd-off{ flex:none; margin:0; }
+  #weekRows .wd-times{
+    display:flex; align-items:center; gap:6px; justify-content:flex-start;
+    flex-wrap:nowrap; flex:none; width:auto; margin-top:6px;
+  }
+  #weekRows .time-input{ width:84px; max-width:none; min-width:0; }
   .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:8px; flex-wrap:wrap; }
   .week-nav .btn-outline{ flex:1 1 auto; min-width:0; white-space:nowrap; }
   .week-range{ font-family:var(--font-display); font-weight:600; font-size:15px; }
@@ -1742,7 +1759,10 @@ function renderAppointmentList(vac){
     const cancelled = a.status === 'cancelled';
     const completed = a.status === 'completed';
     const unconfirmed = a.status === 'unconfirmed';
-    const color = cancelled ? 'var(--muted)' : a.serviceColor;
+    // Culoarea serviciului se aplică EXCLUSIV pentru programări confirmate/finalizate;
+    // cele neconfirmate sunt semnalate cu roșu, indiferent de serviciu, ca să se
+    // diferențieze clar la o primă vedere.
+    const color = cancelled ? 'var(--muted)' : unconfirmed ? 'var(--danger)' : a.serviceColor;
     return `
       <div class="appt-card ${cancelled ? 'cancelled' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
         <div class="appt-time">${fmtTime(a.startTime)}<small>${fmtTime(a.endTime)}</small></div>
@@ -1751,7 +1771,7 @@ function renderAppointmentList(vac){
           <div class="appt-service"><span class="swatch" style="background:${color}"></span>${escapeHtml(a.serviceName || '')}</div>
           ${cancelled ? `<span class="appt-tag">Anulată</span>` : ''}
           ${completed ? `<span class="appt-tag" style="background:var(--success)">Finalizată</span>` : ''}
-          ${unconfirmed ? `<span class="appt-tag" style="background:var(--warn)">Neconfirmată</span>` : ''}
+          ${unconfirmed ? `<span class="appt-tag" style="background:var(--danger)">Neconfirmată</span>` : ''}
           ${a.pendingOffline ? `<span class="appt-tag pending-tag">Offline — în așteptare</span>` : ''}
         </div>
         ${(!cancelled && !a.pendingOffline) ? reminderActionsHtml(a) : ''}
@@ -2737,13 +2757,15 @@ async function loadWeekRows(){
     const off = !existing;
     return `
       <div class="wd-row" data-date="${key}">
-        <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
+        <div class="wd-row-top">
+          <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
+          <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
+        </div>
         <div class="wd-times">
           <input type="time" class="time-input wk-start" value="${existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
           <span class="wd-sep">–</span>
           <input type="time" class="time-input wk-end" value="${existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
         </div>
-        <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
       </div>
     `;
   }).join('');
