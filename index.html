@@ -2910,11 +2910,12 @@ async function loadWeekRows(){
 
   wrap.querySelectorAll('.wd-row').forEach(row => {
     const offCb = row.querySelector('.wk-off');
-    const startInp = row.querySelector('.wk-start');
-    const endInp = row.querySelector('.wk-end');
+    const shiftSelect = row.querySelector('.wk-shift');
     offCb.addEventListener('change', () => {
-      startInp.disabled = offCb.checked; endInp.disabled = offCb.checked;
-      if (offCb.checked){ startInp.value = ''; endInp.value = ''; }
+      shiftSelect.disabled = offCb.checked;
+    
+      if (offCb.checked){
+        shiftSelect.value = ''; }
     });
   });
 }
@@ -2935,8 +2936,11 @@ async function saveWeek(){
     const [yy, mm, dd] = dateKey.split('-').map(Number);
     const day = new Date(yy, mm - 1, dd);
     const off = row.querySelector('.wk-off').checked;
-    const startVal = row.querySelector('.wk-start').value;
-    const endVal = row.querySelector('.wk-end').value;
+    const shiftSelect = row.querySelector('.wk-shift');
+   const shiftValue = shiftSelect ? shiftSelect.value : ''; 
+   let startVal = '';
+   let endVal = ''; 
+   if (shiftValue) { [startVal, endVal] = shiftValue.split('|'); }
     try {
       if (off || !startVal || !endVal){ await clearDayJobBlock(state.employee.id, day); continue; }
       if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ problems.push(`${fmtDateShort(day)}: ora de sfârșit trebuie să fie după cea de început.`); continue; }
