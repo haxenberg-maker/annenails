@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Programări Unghii</title>
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Unghii" />
+<meta name="theme-color" content="#9B2247" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -42,7 +47,7 @@
   }
   button{ font-family:inherit; cursor:pointer; }
   input, select, textarea{ font-family:inherit; }
-  #app{ max-width:480px; margin:0 auto; min-height:100%; position:relative; padding-bottom:96px; }
+  #app{ max-width:480px; margin:0 auto; min-height:100%; position:relative; padding-bottom:100px; }
   @media (min-width:780px){
     #app{ max-width:940px; }
   }
@@ -276,14 +281,32 @@
   }
   @keyframes spin{ to{ transform:rotate(360deg); } }
 
-  /* ---------- FAB ---------- */
-  .fab{
-    position:fixed; right:24px; bottom:24px; z-index:6;
-    background:var(--accent); color:#fff; border:none; border-radius:18px;
-    padding:14px 20px; font-size:14.5px; font-weight:600; box-shadow:0 12px 24px rgba(155,34,71,0.35);
-    display:flex; align-items:center; gap:8px;
+  /* ---------- Bottom Navigation Bar (stil aplicație nativă) ---------- */
+  .bottom-nav{
+    position:fixed; bottom:0; left:0; right:0; height:68px; background:var(--surface);
+    border-top:1px solid var(--border); z-index:50; display:flex; align-items:center; justify-content:space-around;
+    max-width:480px; margin:0 auto; box-shadow:0 -4px 18px rgba(43,33,31,.06);
+    padding-bottom:env(safe-area-inset-bottom, 0);
   }
-  .fab:hover{ background:var(--accent-dark); }
+  @media (min-width:820px){ .bottom-nav{ max-width:940px; } }
+  .bnav-btn{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    background:none; border:none; color:var(--ink-soft); font-size:10.5px; font-weight:600;
+    flex:1; height:100%; position:relative;
+  }
+  .bnav-btn:active{ color:var(--accent); }
+  .bnav-btn.active{ color:var(--accent); }
+  .bnav-badge{
+    position:absolute; top:6px; right:calc(50% - 20px); min-width:16px; height:16px; padding:0 4px;
+    background:var(--accent); color:#fff; border-radius:999px; font-size:10px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  .bnav-add{
+    flex:none; width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 10px 20px rgba(155,34,71,0.35);
+    margin-top:-30px; border:4px solid var(--surface);
+  }
+  .bnav-add:active{ background:var(--accent-dark); }
 
   /* ---------- Setări: secțiune pliabilă „Interval orar” ---------- */
   #hoursDetails{ padding:0; }
@@ -1466,11 +1489,8 @@ function renderAppShell(){
           <div id="dayContent"></div>
         </section>
       </div>
-      <button class="fab" id="fabAdd">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Programare nouă
-      </button>
     </div>
+    ${bottomNavHtml()}
   `;
 
   document.getElementById('logoutBtn').addEventListener('click', () => sb.auth.signOut());
@@ -1487,8 +1507,43 @@ function renderAppShell(){
     if (monthChanged) await loadMonthDots(); // reîncarcă + recalculează bulinele lunii curente înainte de a seta ziua
     setDay(t);
   });
-  document.getElementById('fabAdd').addEventListener('click', openAddModal);
+  wireBottomNav();
   updateConnDot();
+}
+
+/** Markup-ul barei fixe de jos, stil aplicație nativă: Modele (stânga),
+ * buton Plus proeminent (centru) și Neconfirmate cu insignă (dreapta). */
+function bottomNavHtml(active){
+  return `
+    <nav class="bottom-nav">
+      <button type="button" class="bnav-btn ${active === 'models' ? 'active' : ''}" id="bnavModelsBtn" title="Modele">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13 21l-8-8 7.59-7.59A2 2 0 0 1 14 5h5a2 2 0 0 1 2 2v5a2 2 0 0 1-.41 1.41z"/><circle cx="16.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>
+        <span>Modele</span>
+      </button>
+      <button type="button" class="bnav-add" id="bnavAddBtn" title="Programare nouă">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button type="button" class="bnav-btn ${active === 'unconfirmed' ? 'active' : ''}" id="bnavUnconfirmedBtn" title="Programări neconfirmate">
+        <span style="position:relative; display:inline-flex;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="bnav-badge hidden" id="unconfirmedBadgeBottom">0</span>
+        </span>
+        <span>Neconfirmate</span>
+      </button>
+    </nav>
+  `;
+}
+
+/** Conectează click-urile barei de jos — apelabilă de pe orice ecran
+ * (calendar, modele, cliente, setări) care include bottomNavHtml(). */
+function wireBottomNav(){
+  const modelsBtn = document.getElementById('bnavModelsBtn');
+  const addBtn = document.getElementById('bnavAddBtn');
+  const unconfBtn = document.getElementById('bnavUnconfirmedBtn');
+  if (modelsBtn) modelsBtn.addEventListener('click', goModels);
+  if (addBtn) addBtn.addEventListener('click', openAddModal);
+  if (unconfBtn) unconfBtn.addEventListener('click', openUnconfirmedModal);
+  refreshUnconfirmedBadge();
 }
 
 /** Adaugă închiderea automată la click pe backdrop (în afara chenarului)
@@ -2008,8 +2063,15 @@ async function renderSettingsScreen(){
           <button class="btn-outline" id="goModelsFromSettings">Deschide pagina Modele →</button>
         </section>
 
+        <section class="panel settings-section" id="pwaInstallSection" style="display:none;">
+          <h2>Aplicație pe telefon</h2>
+          <p class="settings-hint">Instalează „Programări Unghii” pe ecranul principal, ca o aplicație nativă — se deschide instant, fără browser.</p>
+          <button class="btn-primary" id="pwaInstallBtn">📲 Descarcă / Instalează aplicația pe telefon</button>
+        </section>
+
       </div>
     </div>
+    ${bottomNavHtml()}
   `;
 
   document.getElementById('backBtn').addEventListener('click', goCalendar);
@@ -2028,6 +2090,8 @@ async function renderSettingsScreen(){
       sw.classList.add('active');
     });
   });
+  wireBottomNav();
+  wirePwaInstallButton('pwaInstallBtn', 'pwaInstallSection');
 
   renderHoursRows();
   await loadWeekRows();
@@ -2201,6 +2265,7 @@ async function renderModelsScreen(){
         </section>
       </div>
     </div>
+    ${bottomNavHtml('models')}
   `;
 
   document.getElementById('backBtn').addEventListener('click', goCalendar);
@@ -2213,6 +2278,7 @@ async function renderModelsScreen(){
       sw.classList.add('active');
     });
   });
+  wireBottomNav();
 
   await loadServicesSection();
 }
@@ -2236,8 +2302,10 @@ async function renderClientsScreen(){
         </section>
       </div>
     </div>
+    ${bottomNavHtml()}
   `;
   document.getElementById('backBtn').addEventListener('click', goCalendar);
+  wireBottomNav();
 
   const listEl = document.getElementById('browseClientList');
   listEl.innerHTML = `<div class="spinner"></div>`;
@@ -2462,21 +2530,23 @@ async function setAppointmentStatus(id, status){
 }
 
 async function refreshUnconfirmedBadge(){
+  if (!state.employee) return;
   const badge = document.getElementById('unconfirmedBadge');
-  if (!badge || !state.employee) return;
+  const badgeBottom = document.getElementById('unconfirmedBadgeBottom');
+  if (!badge && !badgeBottom) return;
   try {
     const { count, error } = await sb.from('appointments')
       .select('id', { count: 'exact', head: true })
       .eq('employee_id', state.employee.id)
       .eq('status', 'unconfirmed');
     if (error) throw error;
-    if (count && count > 0){
-      badge.textContent = count > 99 ? '99+' : String(count);
-      badge.classList.remove('hidden');
-    } else {
-      badge.classList.add('hidden');
-    }
-  } catch (e){ /* offline sau eroare - lăsăm badge-ul cum era */ }
+    const label = (count && count > 0) ? (count > 99 ? '99+' : String(count)) : null;
+    [badge, badgeBottom].forEach(el => {
+      if (!el) return;
+      if (label){ el.textContent = label; el.classList.remove('hidden'); }
+      else { el.classList.add('hidden'); }
+    });
+  } catch (e){ /* offline sau eroare - lăsăm badge-urile cum erau */ }
 }
 
 function ensureUnconfirmedModal(){
@@ -3884,6 +3954,123 @@ async function bootstrapApp(){
   await handleRoute();
   if (navigator.onLine) trySyncOfflineQueue();
 }
+
+/* ====================== PWA: Manifest + Service Worker + Instalare ====================== */
+let deferredInstallPrompt = null;
+let pwaInstallAvailable = false;
+
+/** Desenează pe un canvas offscreen o iconiță simplă (cerc accent + „U”)
+ * și o întoarce ca Data URI PNG, pentru manifest (fără fișiere externe). */
+function generateAppIconDataUri(size){
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#9B2247';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(0, 0, size, size, size * 0.22) : ctx.rect(0, 0, size, size);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = `700 ${Math.round(size * 0.56)}px Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('U', size / 2, size / 2 + size * 0.03);
+  return canvas.toDataURL('image/png');
+}
+
+/** Construiește manifestul PWA în memorie (Blob + Object URL) — nu necesită
+ * un fișier manifest.json separat, aplicația rămâne monolitică. */
+function injectPwaManifest(){
+  try {
+    const manifest = {
+      name: 'Programări Unghii',
+      short_name: 'Unghii',
+      description: 'Aplicație de programări pentru salon de unghii',
+      start_url: location.pathname + location.search,
+      scope: location.pathname,
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#FBF3EE',
+      theme_color: '#9B2247',
+      icons: [
+        { src: generateAppIconDataUri(192), sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: generateAppIconDataUri(512), sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = url;
+    document.head.appendChild(link);
+  } catch (e){ /* manifest opțional — aplicația funcționează și fără el */ }
+}
+
+/** Service Worker minimal, injectat ca Blob (fără fișier sw.js separat):
+ * pune în cache shell-ul aplicației la instalare, pentru redeschidere offline. */
+function registerInlineServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  const swSource = `
+    const CACHE_NAME = 'unghii-app-shell-v1';
+    self.addEventListener('install', (event) => {
+      self.skipWaiting();
+      event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.add(self.registration.scope).catch(() => {}))
+      );
+    });
+    self.addEventListener('activate', (event) => {
+      event.waitUntil(self.clients.claim());
+    });
+    self.addEventListener('fetch', (event) => {
+      if (event.request.method !== 'GET') return;
+      event.respondWith(
+        caches.open(CACHE_NAME).then((cache) =>
+          fetch(event.request).then((networkResp) => {
+            cache.put(event.request, networkResp.clone());
+            return networkResp;
+          }).catch(() => cache.match(event.request))
+        )
+      );
+    });
+  `;
+  const blob = new Blob([swSource], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(() => { /* offline install e opțional, ignorăm eroarea */ });
+}
+
+/** Afișează discret butonul „Descarcă / Instalează aplicația” în Setări,
+ * doar dacă browserul a declanșat beforeinstallprompt (Android/Chrome). */
+function wirePwaInstallButton(btnId, sectionId){
+  const section = document.getElementById(sectionId);
+  const btn = document.getElementById(btnId);
+  if (!section || !btn) return;
+  if (pwaInstallAvailable) section.style.display = '';
+  btn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted'){ section.style.display = 'none'; }
+    deferredInstallPrompt = null;
+    pwaInstallAvailable = false;
+  });
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  pwaInstallAvailable = true;
+  const section = document.getElementById('pwaInstallSection');
+  if (section) section.style.display = '';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  pwaInstallAvailable = false;
+  const section = document.getElementById('pwaInstallSection');
+  if (section) section.style.display = 'none';
+});
+
+injectPwaManifest();
+registerInlineServiceWorker();
 
 sb.auth.onAuthStateChange((_event, session) => {
   const wasLoggedIn = !!state.session;
