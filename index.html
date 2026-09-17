@@ -2909,8 +2909,9 @@ async function loadWeekRows(){
             <option value="">Alege programul</option>
             <option value="08:00|12:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '12:30' ? 'selected' : ''}>08:00 - 12:30</option>
             <option value="08:00|13:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '08:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '13:00' ? 'selected' : ''}>08:00 - 13:00</option>
-            <option value="13:00|21:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '13:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:30' ? 'selected' : ''}>13:00 - 21:30</option>
             <option value="12:30|21:00" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '12:30' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:00' ? 'selected' : ''}>12:30 - 21:00</option>
+            <option value="13:00|21:30" ${existing && minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) === '13:00' && minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) === '21:30' ? 'selected' : ''}>13:00 - 21:30</option>
+
           </select>
          </div>
       </div>
