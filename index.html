@@ -2896,9 +2896,13 @@ async function loadWeekRows(){
           <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
         </div>
         <div class="wd-times">
-          <input type="time" class="time-input wk-start" value="${existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
-          <span class="wd-sep">–</span>
-          <input type="time" class="time-input wk-end" value="${existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
+          <select class="time-input wk-shift">
+            <option value="">Alege programul</option>
+            <option value="08:00|12:30">08:00 - 12:30</option>
+            <option value="08:00|13:00">08:00 - 13:00</option>
+            <option value="13:00|21:30">13:00 - 21:30</option>
+            <option value="12:30|21:00">12:30 - 21:00</option>
+          </select>
         </div>
       </div>
     `;
