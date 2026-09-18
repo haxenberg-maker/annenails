@@ -244,6 +244,27 @@
     border-radius:20px; background:var(--muted); color:#fff;
   }
   .appt-tag.pending-tag{ background:var(--warn); }
+  .appt-amount{
+    display:inline-block; margin-top:6px; font-size:12px; font-weight:700;
+    color:var(--success);
+  }
+  .appt-amount.estimated{ color:var(--ink-soft); font-weight:600; }
+  .agenda-total{
+    font-size:13.5px; font-weight:600; color:var(--success); margin-top:2px;
+  }
+
+  /* ---------- Dialog de confirmare custom (înlocuiește window.confirm) ---------- */
+  #confirmDialog{ max-width:360px; }
+  .confirm-body{ padding:4px 2px 18px; }
+  .confirm-title{ font-family:var(--font-display); font-size:17px; font-weight:600; margin-bottom:8px; }
+  .confirm-message{ font-size:14px; color:var(--ink-soft); line-height:1.45; }
+  .confirm-actions{ display:flex; gap:10px; }
+  .confirm-actions button{ flex:1; }
+  .btn-danger{
+    width:100%; padding:13px 14px; border-radius:var(--radius-sm);
+    background:var(--danger); color:#fff; border:none; font-size:15px; font-weight:600;
+  }
+  .btn-danger:hover{ opacity:.9; }
   .appt-cancel{
     flex:none; width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
     background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
@@ -262,6 +283,8 @@
   .reminder-copy-btn:hover{ border-color:var(--accent); color:var(--accent); }
   .reminder-wa-btn{ border-color:#25D36655; color:#25D366; }
   .reminder-wa-btn:hover{ border-color:#25D366; background:#25D36618; }
+  .push-reminder-btn.has-reminder{ background:var(--success); border-color:var(--success); color:#fff; }
+  .push-reminder-btn.has-reminder:hover{ opacity:.9; }
   .unconf-card .reminder-actions{ flex-direction:row; margin-top:8px; margin-bottom:12px; margin-left:0; }
 
   .block-card{
@@ -467,6 +490,35 @@
   }
   .slots-label{ font-size:13.5px; color:var(--ink-soft); margin:4px 0 10px 0; }
   .slots-wrap{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
+
+  /* ---------- Selector vizual de servicii (modalul „Programare nouă”) ---------- */
+  .service-picker{
+    display:flex; flex-direction:column; gap:8px; max-height:280px; overflow-y:auto;
+    padding:2px; margin-bottom:2px;
+  }
+  .service-card{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    padding:10px 12px; border-radius:var(--radius-sm); border:1.5px solid var(--border);
+    background:var(--surface);
+  }
+  .service-card:hover{ border-color:var(--accent); }
+  .service-card.selected{ border-color:var(--accent); background:var(--accent-soft); }
+  .service-card-thumb{
+    flex:none; width:40px; height:40px; border-radius:10px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; background:var(--bg);
+  }
+  .service-card-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .service-card-dot{ width:16px; height:16px; border-radius:50%; flex:none; }
+  .service-card-info{ flex:1; min-width:0; }
+  .service-card-name{ font-weight:600; font-size:14.5px; color:var(--ink); display:flex; align-items:center; gap:7px; }
+  .service-card-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .service-card-desc{ font-size:12px; color:var(--ink-soft); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .service-card-check{
+    flex:none; width:20px; height:20px; border-radius:50%; border:1.5px solid var(--border);
+    display:flex; align-items:center; justify-content:center; color:transparent;
+  }
+  .service-card.selected .service-card-check{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
   /* Zonă cu înălțime minimă fixă, ca modalul „Programare nouă” să nu-și
      schimbe dimensiunea când sloturile apar/dispar/se selectează. */
   .slots-area{ min-height:180px; }
@@ -702,7 +754,7 @@ const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 // Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
 // Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
-const VAPID_PUBLIC_KEY = 'BKiSow8oM73_2zqr9SR8RnVwr_tmFvCbnPTJPiMCQgqDLWiBlvmSWBVAgC6yMB8QIieKY2ydVbL-Z6valmmCLOw';
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -947,6 +999,7 @@ const cache = {
   jobBlocks: [],
   customTasks: [],
   vacations: [],
+  reminderApptIds: new Set(),
   rangeFrom: null,
   rangeTo: null,
 };
@@ -1525,14 +1578,44 @@ async function deleteCustomTask(id){
 
 /** Adaugă un memento suplimentar (push) pentru o programare anume, pe lângă
  * cel automat calculat din intervalul implicit al angajatei. */
+/** Id-urile programărilor care au cel puțin un memento încă „pending”
+ * (automat sau personalizat) — folosit ca să aprindem verde butonul cu ceas. */
+async function getActiveReminderApptIds(employeeId){
+  const { data, error } = await sb.from('scheduled_notifications')
+    .select('appointment_id')
+    .eq('employee_id', employeeId)
+    .eq('status', 'pending');
+  if (error) return new Set();
+  return new Set(data.map(r => r.appointment_id));
+}
+
+/** Adaugă un memento suplimentar (push) pentru o programare anume, pe lângă
+ * cel automat calculat din intervalul implicit al angajatei.
+ * Folosește upsert cu ignoreDuplicates pe indexul unic (appointment_id,
+ * scheduled_send_at) — dacă există deja un memento EXACT la aceeași oră
+ * (fie cel automat, fie unul personalizat anterior), nu mai inserează un
+ * al doilea rând (asta ar da eroare de "duplicate key") și nici nu-l
+ * modifică pe cel existent; doar anunțăm frumos utilizatorul. */
 async function createCustomReminder({ appointmentId, employeeId, scheduledSendAt }){
-  const { error } = await sb.from('scheduled_notifications').insert({
+  const { data: existing, error: checkErr } = await sb.from('scheduled_notifications')
+    .select('id')
+    .eq('appointment_id', appointmentId)
+    .eq('scheduled_send_at', scheduledSendAt.toISOString())
+    .maybeSingle();
+  if (checkErr) throw checkErr;
+  if (existing){
+    const err = new Error('Există deja un memento programat exact la această oră.');
+    err.code = 'ALREADY_SCHEDULED';
+    throw err;
+  }
+
+  const { error } = await sb.from('scheduled_notifications').upsert({
     appointment_id: appointmentId,
     employee_id: employeeId,
     scheduled_send_at: scheduledSendAt.toISOString(),
     status: 'pending',
     source: 'custom',
-  });
+  }, { onConflict: 'appointment_id,scheduled_send_at', ignoreDuplicates: true });
   if (error) throw error;
 }
 
@@ -1700,16 +1783,18 @@ async function bulkLoadCache(){
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const to = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999);
-  const [{ appts, blocks, tasks }, vacRes, clients, services] = await Promise.all([
+  const [{ appts, blocks, tasks }, vacRes, clients, services, reminderIds] = await Promise.all([
     loadApptsAndBlocksRange(from, to),
     getVacations(state.employee.id),
     getClients(),
     getServices(),
+    getActiveReminderApptIds(state.employee.id),
   ]);
   cache.appointments = appts;
   cache.jobBlocks = blocks;
   cache.customTasks = tasks;
   cache.vacations = vacRes.list;
+  cache.reminderApptIds = reminderIds;
   state.vacationsMissingTable = vacRes.missingTable;
   cache.rangeFrom = from;
   cache.rangeTo = to;
@@ -1735,10 +1820,14 @@ async function ensureRangeCached(from, to){
 async function forceRefreshCache(){
   if (!state.employee || !cache.rangeFrom || !cache.rangeTo) return;
   try {
-    const { appts, blocks, tasks } = await loadApptsAndBlocksRange(cache.rangeFrom, cache.rangeTo);
+    const [{ appts, blocks, tasks }, reminderIds] = await Promise.all([
+      loadApptsAndBlocksRange(cache.rangeFrom, cache.rangeTo),
+      getActiveReminderApptIds(state.employee.id),
+    ]);
     cache.appointments = appts;
     cache.jobBlocks = blocks;
     cache.customTasks = tasks;
+    cache.reminderApptIds = reminderIds;
   } catch (e){ /* offline — păstrăm ce avem local */ }
 }
 
@@ -1906,6 +1995,7 @@ function renderAppShell(){
         <section class="panel" id="agendaPanel">
           <div class="agenda-employee" id="employeeSub2">Programul zilei</div>
           <div class="agenda-date" id="agendaDate"></div>
+          <div class="agenda-total" id="agendaTotal"></div>
           <div id="dayContent"></div>
         </section>
       </div>
@@ -2013,6 +2103,56 @@ function wireDialogBackdropClose(dialog){
   if (!dialog || dialog.dataset.backdropWired) return;
   dialog.dataset.backdropWired = '1';
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+}
+
+/* ====================== DIALOG DE CONFIRMARE CUSTOM ====================== */
+function ensureConfirmDialog(){
+  if (document.getElementById('confirmDialog')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="confirmDialog">
+      <div class="confirm-body">
+        <div class="confirm-title" id="confirmDialogTitle"></div>
+        <div class="confirm-message" id="confirmDialogMessage"></div>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" class="btn-outline" id="confirmDialogCancel"></button>
+        <button type="button" class="btn-danger" id="confirmDialogConfirm"></button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+/** Înlocuiește window.confirm() cu un <dialog> stilizat, integrat în design.
+ * Returnează o Promise<boolean> — true dacă utilizatorul a apăsat confirmarea.
+ * Ex: if (!(await confirmDialog({ message: 'Ștergi X?' }))) return; */
+function confirmDialog({ title = 'Confirmare', message = '', confirmLabel = 'Șterge', cancelLabel = 'Anulează', danger = true } = {}){
+  ensureConfirmDialog();
+  const dlg = document.getElementById('confirmDialog');
+  document.getElementById('confirmDialogTitle').textContent = title;
+  document.getElementById('confirmDialogMessage').textContent = message;
+  const confirmBtn = document.getElementById('confirmDialogConfirm');
+  const cancelBtn = document.getElementById('confirmDialogCancel');
+  confirmBtn.textContent = confirmLabel;
+  cancelBtn.textContent = cancelLabel;
+  confirmBtn.className = danger ? 'btn-danger' : 'btn-primary';
+
+  return new Promise((resolve) => {
+    const cleanup = (result) => {
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      dlg.removeEventListener('cancel', onCancel);
+      dlg.close();
+      resolve(result);
+    };
+    const onConfirm = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+    dlg.addEventListener('cancel', onCancel); // tasta Esc
+    dlg.showModal();
+  });
 }
 
 function refreshHeaderInfo(){
@@ -2192,6 +2332,19 @@ function renderDayFromCache(){
   state.dayJobBlocks = blocks;
   state.dayCustomTasks = tasks;
   renderAppointmentList(vac);
+  renderAgendaTotal(appts);
+}
+
+/** Suma totală ÎNCASATĂ (nu estimată) în ziua afișată — doar programările
+ * finalizate contează, la fel ca la calculul din Statistici. */
+function renderAgendaTotal(appts){
+  const el = document.getElementById('agendaTotal');
+  if (!el) return;
+  const completed = appts.filter(a => a.status === 'completed');
+  if (completed.length === 0){ el.textContent = ''; return; }
+  const total = completed.reduce((sum, a) => sum + (a.paidAmount != null ? a.paidAmount : a.servicePrice), 0);
+  const label = isSameDay(state.selectedDay, new Date()) ? 'Total încasat azi' : `Total încasat (${fmtDateShort(state.selectedDay)})`;
+  el.textContent = `${label}: ${total.toLocaleString('ro-RO')} lei`;
 }
 
 /** Un element (programare/bloc de job/sarcină) e considerat „trecut” dacă
@@ -2279,6 +2432,10 @@ function renderAppointmentList(vac){
     // cele neconfirmate sunt semnalate cu roșu, indiferent de serviciu, ca să se
     // diferențieze clar la o primă vedere.
     const color = cancelled ? 'var(--muted)' : unconfirmed ? 'var(--danger)' : a.serviceColor;
+    const amount = a.paidAmount != null ? a.paidAmount : a.servicePrice;
+    const amountHtml = (!cancelled && amount != null)
+      ? `<span class="appt-amount ${completed ? 'paid' : 'estimated'}">${amount.toLocaleString('ro-RO')} lei${completed ? '' : ' (estimat)'}</span>`
+      : '';
     return `
       <div class="appt-card ${cancelled ? 'cancelled' : ''} ${past ? 'past-item' : ''}" style="border-left-color:${color}" data-appt-idx="${idx}" data-pending="${a.pendingOffline ? '1' : '0'}">
         <div class="appt-card-top">
@@ -2290,12 +2447,13 @@ function renderAppointmentList(vac){
             ${completed ? `<span class="appt-tag" style="background:var(--success)">Finalizată</span>` : ''}
             ${unconfirmed ? `<span class="appt-tag" style="background:var(--danger)">Neconfirmată</span>` : ''}
             ${a.pendingOffline ? `<span class="appt-tag pending-tag">Offline — în așteptare</span>` : ''}
+            ${amountHtml}
           </div>
         </div>
         ${(!cancelled && !a.pendingOffline) ? `
         <div class="appt-actions-bar">
           ${reminderActionsHtml(a)}
-          <button class="reminder-btn push-reminder-btn" data-push-reminder-id="${a.id}" title="Adaugă memento personalizat">
+          <button class="reminder-btn push-reminder-btn ${cache.reminderApptIds.has(a.id) ? 'has-reminder' : ''}" data-push-reminder-id="${a.id}" title="${cache.reminderApptIds.has(a.id) ? 'Are un memento activ — adaugă altul' : 'Adaugă memento personalizat'}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14.5"/></svg>
           </button>
           <button class="appt-cancel" data-id="${a.id}" title="Anulează programarea">
@@ -2347,7 +2505,7 @@ function renderAppointmentList(vac){
 
 /** Șterge o sarcină custom cu actualizare optimistă a UI-ului. */
 async function deleteCustomTaskOptimistic(id){
-  if (!confirm('Ștergi această sarcină?')) return;
+  if (!(await confirmDialog({ title: 'Ștergi sarcina?', message: 'Această acțiune nu poate fi anulată.', confirmLabel: 'Șterge' }))) return;
   const idx = cache.customTasks.findIndex(t => t.id === id);
   const previous = idx >= 0 ? cache.customTasks[idx] : null;
   if (idx >= 0) cache.customTasks.splice(idx, 1);
@@ -2365,7 +2523,7 @@ async function deleteCustomTaskOptimistic(id){
  * trimite cererea către Supabase în fundal. La eroare, revine la starea
  * anterioară și anunță utilizatorul. */
 async function cancelAppointmentOptimistic(id){
-  if (!confirm('Sigur anulezi această programare?')) return;
+  if (!(await confirmDialog({ title: 'Anulezi programarea?', message: 'Clienta nu va mai apărea în agendă la ora respectivă.', confirmLabel: 'Anulează programarea', cancelLabel: 'Renunță' }))) return;
   const idx = cache.appointments.findIndex(a => a.id === id);
   const previous = idx >= 0 ? { ...cache.appointments[idx] } : null;
   if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'cancelled' };
@@ -2734,7 +2892,7 @@ async function loadVacationsSection(){
   if (res.missingTable){
     document.getElementById('copyVacSqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(VACATIONS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
   cache.vacations = res.list;
@@ -2757,7 +2915,7 @@ function renderVacationsList(){
   `).join('');
   list.querySelectorAll('button[data-id]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Ștergi acest concediu?')) return;
+      if (!(await confirmDialog({ title: 'Ștergi concediul?', message: 'Ziua va redeveni disponibilă pentru programări.', confirmLabel: 'Șterge' }))) return;
       const id = btn.dataset.id;
       const prevList = [...cache.vacations];
       cache.vacations = cache.vacations.filter(v => v.id !== id);
@@ -3113,7 +3271,7 @@ async function saveEditClient(){
 async function deleteClientWithConfirm(id, onDone){
   const client = state.clients.find(c => c.id === id);
   if (!client) return;
-  if (!confirm(`Ștergi definitiv clienta „${client.name}”? Această acțiune nu poate fi anulată.`)) return;
+  if (!(await confirmDialog({ title: 'Ștergi clienta?', message: `Ștergi definitiv clienta „${client.name}”? Această acțiune nu poate fi anulată.`, confirmLabel: 'Șterge clienta' }))) return;
   const toastId = showToast('Se șterge…', 'saving', { persist: true });
   try {
     if (!String(id).startsWith('offline-client')){
@@ -3143,6 +3301,14 @@ async function setAppointmentStatus(id, status){
 
 async function refreshUnconfirmedBadge(){
   if (!state.employee) return;
+
+  // Reîmprospătăm și mementourile active (pentru culoarea butonului cu ceas),
+  // fără să blocăm restul — un memento poate trece din pending în sent între timp.
+  getActiveReminderApptIds(state.employee.id).then(ids => {
+    cache.reminderApptIds = ids;
+    renderDayFromCache();
+  }).catch(() => {});
+
   const badge = document.getElementById('unconfirmedBadge');
   const badgeBottom = document.getElementById('unconfirmedBadgeBottom');
   if (!badge && !badgeBottom) return;
@@ -3445,7 +3611,7 @@ function renderHoursRows(){
   if (state.weekdayHoursMissingTable){
     document.getElementById('copyHoursSqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(WEEKDAY_HOURS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
   const wrap = document.getElementById('hoursRows');
@@ -3639,7 +3805,7 @@ async function loadServicesSection(){
   if (!colorOk){
     document.getElementById('copySvcSqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(SERVICE_COLOR_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
     saveBtn.disabled = true;
   } else {
@@ -3660,7 +3826,7 @@ async function loadServicesSection(){
   if (!mediaOk){
     document.getElementById('copyMediaSqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(SERVICE_MEDIA_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
 
@@ -3679,7 +3845,7 @@ async function loadServicesSection(){
   if (!galleryOk){
     document.getElementById('copyGallerySqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(SERVICE_GALLERY_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
 
@@ -4073,7 +4239,7 @@ async function saveEditService(){
 async function deleteServiceWithConfirm(id){
   const svc = state.services.find(s => s.id === id);
   if (!svc) return;
-  if (!confirm(`Ștergi serviciul „${svc.name}”? Nu va mai putea fi selectat la programări noi.`)) return;
+  if (!(await confirmDialog({ title: 'Ștergi serviciul?', message: `Ștergi serviciul „${svc.name}”? Nu va mai putea fi selectat la programări noi.`, confirmLabel: 'Șterge serviciul' }))) return;
   const toastId = showToast('Se șterge…', 'saving', { persist: true });
   try {
     await deactivateServiceRow(id);
@@ -4156,7 +4322,7 @@ function loadStats(){
     const btn = document.getElementById('copyPaidAmountSqlBtn');
     if (btn) btn.addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(PAID_AMOUNT_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
 }
@@ -4190,8 +4356,8 @@ function ensureModal(){
         </div>
         <div class="vacation-banner hidden" id="modalVacationWarning"></div>
         <div class="field">
-          <label for="serviceSelect">Serviciu</label>
-          <select id="serviceSelect"><option value="">Alege serviciul…</option></select>
+          <label>Serviciu</label>
+          <div class="service-picker" id="servicePicker"></div>
         </div>
         ${clientPickerHtml('add')}
         <div id="slotsArea" class="slots-area">
@@ -4230,8 +4396,11 @@ function wireModal(){
     refreshSlots();
   });
 
-  document.getElementById('serviceSelect').addEventListener('change', e => {
-    modalState.selectedService = state.services.find(s => s.id === e.target.value) || null;
+  document.getElementById('servicePicker').addEventListener('click', (e) => {
+    const card = e.target.closest('.service-card');
+    if (!card) return;
+    modalState.selectedService = state.services.find(s => s.id === card.dataset.id) || null;
+    document.querySelectorAll('#servicePicker .service-card').forEach(c => c.classList.toggle('selected', c === card));
     refreshSlots();
     updateSaveEnabled();
   });
@@ -4272,10 +4441,32 @@ function checkModalVacation(){
   return !!vac;
 }
 
-function renderServiceOptions(){
-  const sel = document.getElementById('serviceSelect');
-  sel.innerHTML = `<option value="">Alege serviciul…</option>` +
-    state.services.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.durationMinutes} min, ${s.price} lei)</option>`).join('');
+function renderServicePicker(){
+  const wrap = document.getElementById('servicePicker');
+  if (!wrap) return;
+  if (state.services.length === 0){
+    wrap.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun serviciu configurat încă — adaugă unul din Modele.</p>`;
+    return;
+  }
+  const selectedId = modalState.selectedService ? modalState.selectedService.id : null;
+  wrap.innerHTML = state.services.map(s => {
+    const thumb = (s.images && s.images.length)
+      ? `<img src="${escapeHtml(s.images[0])}" alt="" loading="lazy" />`
+      : `<span class="service-card-dot" style="background:${s.color}"></span>`;
+    return `
+      <button type="button" class="service-card ${s.id === selectedId ? 'selected' : ''}" data-id="${s.id}">
+        <span class="service-card-thumb">${thumb}</span>
+        <span class="service-card-info">
+          <span class="service-card-name"><span class="service-card-dot" style="width:9px;height:9px;background:${s.color}"></span>${escapeHtml(s.name)}</span>
+          <span class="service-card-meta">${s.durationMinutes} min · ${s.price} lei</span>
+          ${s.description ? `<span class="service-card-desc">${escapeHtml(s.description)}</span>` : ''}
+        </span>
+        <span class="service-card-check">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+      </button>
+    `;
+  }).join('');
 }
 
 async function openAddModal(){
@@ -4291,7 +4482,7 @@ async function openAddModal(){
 
   document.getElementById('modalDateLabelText').textContent = fmtDateHeader(modalState.day);
   document.getElementById('modalDate').value = ymd(modalState.day);
-  document.getElementById('serviceSelect').value = '';
+  renderServicePicker();
   resetClientPickerUI('add');
   document.getElementById('addNewClientBox').classList.add('hidden');
   document.getElementById('slotsSection').classList.add('hidden');
@@ -4306,7 +4497,7 @@ async function openAddModal(){
     if (state.services.length === 0) state.services = await getServices();
     if (state.clients.length === 0) state.clients = await getClients();
   } catch (e){ showModalError('Eroare la încărcarea datelor: ' + (e.message || e)); }
-  renderServiceOptions();
+  renderServicePicker();
   resetClientPickerUI('add');
 }
 
@@ -4444,7 +4635,7 @@ async function openNewTaskModal(){
   if (!tasksOk){
     document.getElementById('copyTaskSqlBtn').addEventListener('click', async (e) => {
       try { await navigator.clipboard.writeText(CUSTOM_TASKS_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
-      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
     });
   }
 
