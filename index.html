@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>Programări Unghii</title>
+<title>Agendă</title>
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Unghii" />
+<meta name="apple-mobile-web-app-title" content="Agendă" />
 <meta name="theme-color" content="#D6336C" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -312,6 +312,15 @@
 
   /* ---------- Selector ture predefinite (celălalt job) ---------- */
   .wk-shift-select{ width:100%; margin-bottom:6px; }
+  .shift-pill-group{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .shift-pill{
+    padding:8px 14px; border-radius:999px; border:1px solid var(--border);
+    background:var(--surface); color:var(--ink); font-size:13px; font-weight:600;
+    white-space:nowrap;
+  }
+  .shift-pill:hover{ border-color:var(--accent); }
+  .shift-pill.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .shift-pill:disabled{ opacity:.45; }
 
   .current-slot-box{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -693,7 +702,7 @@ const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 // Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
 // Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
-const VAPID_PUBLIC_KEY = 'BKiSow8oM73_2zqr9SR8RnVwr_tmFvCbnPTJPiMCQgqDLWiBlvmSWBVAgC6yMB8QIieKY2ydVbL-Z6valmmCLOw';
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -1836,7 +1845,7 @@ function renderAppShell(){
         <div class="top-row">
           <div class="brand-title-row">
             <span class="conn-dot" id="connDot"></span>
-            <span class="brand-title">Programări</span>
+            <span class="brand-title">Agendă</span>
           </div>
           <div class="header-actions">
             <button class="btn-upcoming" id="upcomingBtn" title="Urmează (14 zile)">
@@ -1884,6 +1893,7 @@ function renderAppShell(){
   document.getElementById('upcomingBtn').addEventListener('click', openUpcomingModal);
   document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
   document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
+  wireCalendarSwipe();
   document.getElementById('todayBtn').addEventListener('click', async () => {
     const t = new Date();
     const monthChanged = !state.calendarMonth || t.getFullYear() !== state.calendarMonth.getFullYear() || t.getMonth() !== state.calendarMonth.getMonth();
@@ -2004,6 +2014,33 @@ function changeMonth(delta){
   loadMonthDots();
 }
 
+/** Swipe stânga/dreapta pe grila calendarului → schimbă luna, ca pe mobil.
+ * Pragul de 50px evită declanșarea accidentală la un simplu tap sau scroll. */
+function wireCalendarSwipe(){
+  const grid = document.getElementById('calGrid');
+  if (!grid || grid.dataset.swipeWired) return;
+  grid.dataset.swipeWired = '1';
+  const SWIPE_THRESHOLD = 50;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  grid.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
+  }, { passive: true });
+
+  grid.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    // ignorăm swipe-urile predominant verticale (scroll din greșeală)
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    if (deltaX < -SWIPE_THRESHOLD) changeMonth(1);
+    else if (deltaX > SWIPE_THRESHOLD) changeMonth(-1);
+  }, { passive: true });
+}
+
 function setDay(d){
   state.selectedDay = d;
   refreshHeaderInfo();
@@ -2013,8 +2050,10 @@ function setDay(d){
 
 /* ====================== MINI CALENDAR ====================== */
 function renderCalendar(){
-  document.getElementById('calMonthLabel').textContent = fmtMonthHeader(state.calendarMonth);
+  const monthLabelEl = document.getElementById('calMonthLabel');
   const grid = document.getElementById('calGrid');
+  if (!monthLabelEl || !grid) return; // ecranul calendarului nu e montat acum (ex: suntem în Setări)
+  monthLabelEl.textContent = fmtMonthHeader(state.calendarMonth);
   const y = state.calendarMonth.getFullYear();
   const m = state.calendarMonth.getMonth();
   const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7;
@@ -2119,9 +2158,11 @@ async function loadDay(){
 function renderDayFromCache(){
   if (!state.employee) return;
   const vac = findVacationForDay(state.selectedDay);
+  const selKey = ymd(state.selectedDay);
   const appts = cache.appointments.filter(a => a.employeeId === state.employee.id && isSameDay(a.startTime, state.selectedDay));
   const blocks = cache.jobBlocks.filter(b => b.employeeId === state.employee.id && isSameDay(b.start, state.selectedDay));
-  const tasks = cache.customTasks.filter(t => t.employeeId === state.employee.id && isSameDay(t.start, state.selectedDay));
+  // Sarcinile pot acoperi mai multe zile — le afișăm în fiecare zi din intervalul lor.
+  const tasks = cache.customTasks.filter(t => t.employeeId === state.employee.id && ymd(t.start) <= selKey && ymd(t.end) >= selKey);
   state.appointments = appts;
   state.dayJobBlocks = blocks;
   state.dayCustomTasks = tasks;
@@ -2145,6 +2186,7 @@ function buildDayItems(){
 
 function renderAppointmentList(vac){
   const content = document.getElementById('dayContent');
+  if (!content) return; // ecranul agendei nu e montat acum (ex: suntem în Setări)
   const items = buildDayItems();
 
   const vacationCardHtml = vac ? `
@@ -2178,12 +2220,25 @@ function renderAppointmentList(vac){
     }
     if (item.type === 'task'){
       const t = item.data;
+      const isMultiDay = ymd(t.start) !== ymd(t.end);
+      const onStartDay = isSameDay(t.start, state.selectedDay);
+      const onEndDay = isSameDay(t.end, state.selectedDay);
+      let timeTop, timeBottom;
+      if (!isMultiDay){
+        timeTop = fmtTime(t.start); timeBottom = fmtTime(t.end);
+      } else if (onStartDay){
+        timeTop = fmtTime(t.start); timeBottom = 'continuă';
+      } else if (onEndDay){
+        timeTop = 'până la'; timeBottom = fmtTime(t.end);
+      } else {
+        timeTop = 'toată'; timeBottom = 'ziua';
+      }
       return `
         <div class="task-card ${past ? 'past-item' : ''}">
-          <div class="task-time">${fmtTime(t.start)}<small>${fmtTime(t.end)}</small></div>
+          <div class="task-time">${timeTop}<small>${timeBottom}</small></div>
           <div class="task-body">
             <div class="task-title">${escapeHtml(t.title)}</div>
-            <div class="task-sub">Sarcină / altă activitate</div>
+            <div class="task-sub">${isMultiDay ? `Sarcină pe mai multe zile (${fmtDateShort(t.start)} – ${fmtDateShort(t.end)})` : 'Sarcină / altă activitate'}</div>
           </div>
           <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -3393,6 +3448,10 @@ async function saveHours(){
     rows.forEach(r => { state.weekdayHours[r.weekday] = { startMin: r.startMin, endMin: r.endMin }; });
     state.weekdayHoursMissingTable = false;
     renderHoursRows();
+    // Reîmprospătăm live ecranul principal (calendar + agenda zilei), chiar
+    // dacă suntem încă în Setări — la revenire, totul e deja la zi.
+    await loadMonthDots();
+    renderDayFromCache();
     okEl.textContent = 'Salvat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Interval orar salvat.', 'success', 1800);
   } catch (e){
@@ -3439,25 +3498,33 @@ async function loadWeekRows(){
     const existingEndHHMM = existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : '';
     const matchedPreset = JOB_SHIFT_PRESETS.find(p => p.start === existingStartHHMM && p.end === existingEndHHMM);
     return `
-      <div class="wd-row" data-date="${key}">
+      <div class="wd-row" data-date="${key}" data-shift="${matchedPreset ? matchedPreset.value : ''}">
         <div class="wd-row-top">
           <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
           <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
         </div>
-        <select class="wk-shift-select" ${off ? 'disabled' : ''}>
-          <option value="">Alege tura…</option>
-          ${JOB_SHIFT_PRESETS.map(p => `<option value="${p.value}" ${matchedPreset && matchedPreset.value === p.value ? 'selected' : ''}>${p.label}</option>`).join('')}
-        </select>
+        <div class="shift-pill-group">
+          ${JOB_SHIFT_PRESETS.map(p => `
+            <button type="button" class="shift-pill ${matchedPreset && matchedPreset.value === p.value ? 'active' : ''}" data-value="${p.value}" ${off ? 'disabled' : ''}>${p.label}</button>
+          `).join('')}
+        </div>
       </div>
     `;
   }).join('');
 
   wrap.querySelectorAll('.wd-row').forEach(row => {
     const offCb = row.querySelector('.wk-off');
-    const shiftSelect = row.querySelector('.wk-shift-select');
+    const pills = row.querySelectorAll('.shift-pill');
     offCb.addEventListener('change', () => {
-      shiftSelect.disabled = offCb.checked;
-      if (offCb.checked) shiftSelect.value = '';
+      pills.forEach(p => { p.disabled = offCb.checked; });
+      if (offCb.checked){ row.dataset.shift = ''; pills.forEach(p => p.classList.remove('active')); }
+    });
+    pills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        pills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        row.dataset.shift = pill.dataset.value;
+      });
     });
   });
 }
@@ -3478,7 +3545,7 @@ async function saveWeek(){
     const [yy, mm, dd] = dateKey.split('-').map(Number);
     const day = new Date(yy, mm - 1, dd);
     const off = row.querySelector('.wk-off').checked;
-    const shiftVal = row.querySelector('.wk-shift-select').value;
+    const shiftVal = row.dataset.shift;
     const preset = JOB_SHIFT_PRESETS.find(p => p.value === shiftVal);
     try {
       if (off || !preset){ await clearDayJobBlock(state.employee.id, day); continue; }
@@ -3496,6 +3563,13 @@ async function saveWeek(){
       await setDayJobBlock(state.employee.id, day, startVal, endVal);
     } catch (e){ problems.push(`${fmtDateShort(day)}: ${e.message || e}`); }
   }
+
+  // Ture noi/modificate → cache.jobBlocks e stale. Re-descărcăm intervalul deja
+  // cunoscut și reîmprospătăm live calendarul + agenda zilei (cerința 1).
+  await forceRefreshCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+  renderDayFromCache();
 
   btn.disabled = false; btn.textContent = 'Salvează programul săptămânii';
   if (problems.length){
@@ -4219,14 +4293,19 @@ function ensureNewTaskModal(){
           <input type="text" id="taskTitle" placeholder="ex: Ridicat comandă produse" />
         </div>
         <div class="field">
-          <label for="taskDate">Dată</label>
-          <input type="date" id="taskDate" />
+          <label for="taskStartDate">Dată început</label>
+          <input type="date" id="taskStartDate" />
+        </div>
+        <div class="field">
+          <label for="taskEndDate">Dată sfârșit <span class="settings-hint" style="font-weight:400;">(opțional — pentru sarcini pe mai multe zile)</span></label>
+          <input type="date" id="taskEndDate" />
         </div>
         <div class="wd-times" style="margin-top:6px;">
           <input type="time" class="time-input" id="taskStart" />
           <span class="wd-sep">–</span>
-          <input type="time" class="time-input" id="taskEnd" />
+          <input type="time" class="time-input" id="taskEnd" placeholder="opțional" />
         </div>
+        <p class="settings-hint" style="margin-top:4px;">Dacă nu completezi ora de sfârșit, punem automat o oră mai târziu (sau sfârșitul zilei, pentru sarcini pe mai multe zile).</p>
         <p class="error-text hidden" id="newTaskError"></p>
         <button class="btn-primary" id="saveNewTaskBtn" style="margin-top:14px;">Salvează sarcina</button>
       </div>
@@ -4244,7 +4323,8 @@ async function openNewTaskModal(){
   if (dlg.open) return;
 
   document.getElementById('taskTitle').value = '';
-  document.getElementById('taskDate').value = ymd(state.selectedDay);
+  document.getElementById('taskStartDate').value = ymd(state.selectedDay);
+  document.getElementById('taskEndDate').value = '';
   document.getElementById('taskStart').value = '';
   document.getElementById('taskEnd').value = '';
   document.getElementById('newTaskError').classList.add('hidden');
@@ -4278,19 +4358,34 @@ async function saveNewTask(){
   if (!state.employee) return;
 
   const title = document.getElementById('taskTitle').value.trim();
-  const dateVal = document.getElementById('taskDate').value;
+  const startDateVal = document.getElementById('taskStartDate').value;
+  const endDateVal = document.getElementById('taskEndDate').value || startDateVal;
   const startVal = document.getElementById('taskStart').value;
-  const endVal = document.getElementById('taskEnd').value;
+  const endVal = document.getElementById('taskEnd').value; // opțional
 
   if (!title){ errEl.textContent = 'Introdu un titlu.'; errEl.classList.remove('hidden'); return; }
-  if (!dateVal || !startVal || !endVal){ errEl.textContent = 'Completează data și orele de început/sfârșit.'; errEl.classList.remove('hidden'); return; }
-  if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ errEl.textContent = 'Ora de sfârșit trebuie să fie după cea de început.'; errEl.classList.remove('hidden'); return; }
+  if (!startDateVal || !startVal){ errEl.textContent = 'Completează data și ora de început.'; errEl.classList.remove('hidden'); return; }
+  if (endDateVal < startDateVal){ errEl.textContent = 'Data de sfârșit nu poate fi înainte de data de început.'; errEl.classList.remove('hidden'); return; }
 
-  const [yy, mm, dd] = dateVal.split('-').map(Number);
-  const [sh, sm] = startVal.split(':').map(Number);
-  const [eh, em] = endVal.split(':').map(Number);
-  const start = new Date(yy, mm - 1, dd, sh, sm);
-  const end = new Date(yy, mm - 1, dd, eh, em);
+  const [sy, sm2, sd] = startDateVal.split('-').map(Number);
+  const [ey, em2, ed] = endDateVal.split('-').map(Number);
+  const [sh, smin] = startVal.split(':').map(Number);
+  const start = new Date(sy, sm2 - 1, sd, sh, smin);
+
+  const isMultiDay = endDateVal !== startDateVal;
+  let end;
+  if (endVal){
+    const [eh, emin] = endVal.split(':').map(Number);
+    end = new Date(ey, em2 - 1, ed, eh, emin);
+  } else if (isMultiDay){
+    // fără oră de sfârșit specificată, pe mai multe zile → sfârșitul ultimei zile
+    end = new Date(ey, em2 - 1, ed, 23, 59);
+  } else {
+    // fără oră de sfârșit, o singură zi → implicit o oră mai târziu
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+
+  if (end <= start){ errEl.textContent = 'Ora de sfârșit trebuie să fie după cea de început.'; errEl.classList.remove('hidden'); return; }
 
   const btn = document.getElementById('saveNewTaskBtn');
   btn.disabled = true; btn.textContent = 'Se salvează…';
@@ -4298,11 +4393,11 @@ async function saveNewTask(){
   try {
     await createCustomTask({ employeeId: state.employee.id, title, start, end });
     cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end });
-    if (isSameDay(start, state.selectedDay)) renderDayFromCache();
+    renderDayFromCache();
     updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
     document.getElementById('newTaskModal').close();
     // Reconciliem cu rândul real din Supabase (id-ul corect), fără să blocăm UI-ul.
-    forceRefreshCache().then(() => { if (isSameDay(start, state.selectedDay)) renderDayFromCache(); });
+    forceRefreshCache().then(() => renderDayFromCache());
   } catch (e){
     updateToast(toastId, 'Eroare la salvare: ' + (e.message || e), 'error', 3200);
   } finally {
@@ -4836,8 +4931,8 @@ function generateAppIconDataUri(size){
 function injectPwaManifest(){
   try {
     const manifest = {
-      name: 'Programări Unghii',
-      short_name: 'Unghii',
+      name: 'Agendă',
+      short_name: 'Agendă',
       description: 'Aplicație de programări pentru salon de unghii',
       start_url: location.pathname + location.search,
       scope: location.pathname,
