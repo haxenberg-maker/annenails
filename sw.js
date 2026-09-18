@@ -60,13 +60,19 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const appointmentId = event.notification.data && event.notification.data.appointmentId;
   event.waitUntil(
     (async () => {
       const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const client of allClients) {
+        // Pagina e deja deschisă — îi trimitem id-ul ca să navigheze direct la programare.
+        if (appointmentId && 'postMessage' in client) {
+          client.postMessage({ type: 'open-appointment', appointmentId });
+        }
         if ('focus' in client) return client.focus();
       }
-      if (clients.openWindow) return clients.openWindow('/');
+      const url = appointmentId ? `/?appt=${encodeURIComponent(appointmentId)}` : '/';
+      if (clients.openWindow) return clients.openWindow(url);
     })()
   );
 });
