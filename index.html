@@ -1472,6 +1472,18 @@ async function clearDayJobBlock(employeeId, day){
   if (error) throw error;
 }
 
+/** Presetul de intervale pentru mementouri personalizate per programare —
+ * vezi butonul cu ceas de pe fiecare card de programare. */
+const PUSH_REMINDER_PRESETS = [
+  { label: '15 min', minutes: 15 },
+  { label: '30 min', minutes: 30 },
+  { label: '45 min', minutes: 45 },
+  { label: '1 oră', minutes: 60 },
+  { label: '8 ore', minutes: 480 },
+  { label: '1 zi', minutes: 1440 },
+  { label: '2 zile', minutes: 2880 },
+];
+
 async function setDayJobBlock(employeeId, day, startHHMM, endHHMM){
   await clearDayJobBlock(employeeId, day);
   const [sh, sm] = startHHMM.split(':').map(Number);
@@ -1508,6 +1520,19 @@ async function createCustomTask({ employeeId, title, start, end }){
 
 async function deleteCustomTask(id){
   const { error } = await sb.from('custom_tasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Adaugă un memento suplimentar (push) pentru o programare anume, pe lângă
+ * cel automat calculat din intervalul implicit al angajatei. */
+async function createCustomReminder({ appointmentId, employeeId, scheduledSendAt }){
+  const { error } = await sb.from('scheduled_notifications').insert({
+    appointment_id: appointmentId,
+    employee_id: employeeId,
+    scheduled_send_at: scheduledSendAt.toISOString(),
+    status: 'pending',
+    source: 'custom',
+  });
   if (error) throw error;
 }
 
@@ -2270,6 +2295,9 @@ function renderAppointmentList(vac){
         ${(!cancelled && !a.pendingOffline) ? `
         <div class="appt-actions-bar">
           ${reminderActionsHtml(a)}
+          <button class="reminder-btn push-reminder-btn" data-push-reminder-id="${a.id}" title="Adaugă memento personalizat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14.5"/></svg>
+          </button>
           <button class="appt-cancel" data-id="${a.id}" title="Anulează programarea">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -2301,6 +2329,14 @@ function renderAppointmentList(vac){
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       deleteCustomTaskOptimistic(btn.dataset.taskId);
+    });
+  });
+
+  content.querySelectorAll('.push-reminder-btn[data-push-reminder-id]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const appt = state.appointments.find(a => a.id === btn.dataset.pushReminderId);
+      if (appt) openPushReminderModal(appt);
     });
   });
 
@@ -4275,6 +4311,69 @@ async function openAddModal(){
 }
 
 /* ====================== MODAL: SARCINĂ NOUĂ / ALTĂ ACTIVITATE ====================== */
+/* ====================== MODAL: MEMENTO PERSONALIZAT PE PROGRAMARE ====================== */
+function ensurePushReminderModal(){
+  if (document.getElementById('pushReminderModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="pushReminderModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Adaugă memento pentru această programare</div>
+        <button class="icon-btn" id="closePushReminderModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <p class="settings-hint" id="pushReminderApptInfo" style="margin-top:0;"></p>
+        <div class="shift-pill-group" id="pushReminderPills">
+          ${PUSH_REMINDER_PRESETS.map(p => `<button type="button" class="shift-pill" data-minutes="${p.minutes}">cu ${p.label} înainte</button>`).join('')}
+        </div>
+        <p class="settings-hint" id="pushReminderNote"></p>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('pushReminderModal'));
+  document.getElementById('closePushReminderModal').addEventListener('click', () => document.getElementById('pushReminderModal').close());
+}
+
+function openPushReminderModal(appt){
+  ensurePushReminderModal();
+  const dlg = document.getElementById('pushReminderModal');
+  document.getElementById('pushReminderApptInfo').textContent =
+    `${escapeHtml(appt.clientName || 'Client')} — ${fmtDateHeader(appt.startTime)}, ${fmtTime(appt.startTime)}`;
+  document.getElementById('pushReminderNote').textContent = '';
+
+  const pillsWrap = document.getElementById('pushReminderPills');
+  pillsWrap.querySelectorAll('.shift-pill').forEach(btn => {
+    btn.onclick = async () => {
+      const minutes = Number(btn.dataset.minutes);
+      const sendAt = new Date(appt.startTime.getTime() - minutes * 60000);
+      const noteEl = document.getElementById('pushReminderNote');
+      btn.disabled = true;
+      try {
+        await createCustomReminder({ appointmentId: appt.id, employeeId: appt.employeeId, scheduledSendAt: sendAt });
+        const inPast = sendAt.getTime() <= Date.now();
+        showToast(
+          inPast
+            ? 'Memento adăugat — ora aleasă a trecut deja, se va trimite la următoarea verificare.'
+            : `Memento adăugat pentru ${fmtDateHeader(sendAt)}, ${fmtTime(sendAt)}.`,
+          'success',
+          { autoHide: 3000 }
+        );
+        dlg.close();
+      } catch (e){
+        noteEl.textContent = 'Eroare: ' + (e.message || e);
+        noteEl.classList.add('error-text');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  dlg.showModal();
+}
+
 function ensureNewTaskModal(){
   if (document.getElementById('newTaskModal')) return;
   const wrap = document.createElement('div');
@@ -4902,6 +5001,14 @@ async function bootstrapApp(){
 
   await handleRoute();
   if (navigator.onLine) trySyncOfflineQueue();
+
+  // Tab nou deschis dintr-o notificare push (sw.js a folosit clients.openWindow
+  // cu acest parametru, fiindcă nu exista deja o filă deschisă de reutilizat).
+  const apptParam = new URLSearchParams(location.search).get('appt');
+  if (apptParam && state.employee){
+    openAppointmentById(apptParam);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
 }
 
 /* ====================== PWA: Manifest + Service Worker + Instalare ====================== */
@@ -4966,6 +5073,38 @@ function registerServiceWorker(){
       subscribeToPush();
     }
   }).catch(() => { /* offline install e opțional, ignorăm eroarea */ });
+
+  // Click pe o notificare push, cu tab-ul deja deschis → sw.js ne trimite
+  // id-ul programării prin postMessage, ca să navigăm direct la ea.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'open-appointment' && event.data.appointmentId){
+      openAppointmentById(event.data.appointmentId);
+    }
+  });
+}
+
+/** Deschide aplicația direct pe o programare anume: sare la ziua ei în
+ * calendar și deschide modalul de editare. Folosit la click pe o notificare
+ * push (fie prin postMessage, dacă tab-ul era deschis, fie din parametrul
+ * ?appt=… din URL, dacă s-a deschis o filă nouă). */
+async function openAppointmentById(id){
+  try {
+    const { data, error } = await sb.from('appointments')
+      .select('*, clients(name), services(name, color, price)')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    const appt = mapApptRow(data);
+    if (state.employee && appt.employeeId !== state.employee.id) return; // altă angajată — nu are sens s-o deschidem aici
+    if (location.hash !== '#/') goCalendar();
+    await ensureRangeCached(new Date(appt.startTime.getFullYear(), appt.startTime.getMonth() - 1, 1), new Date(appt.startTime.getFullYear(), appt.startTime.getMonth() + 2, 0));
+    syncMainViewToDay(appt.startTime);
+    renderCalendar();
+    await loadDay();
+    await openEditModal(appt);
+  } catch (e){
+    showToast('Nu am putut deschide programarea din notificare: ' + (e.message || e), 'error', { autoHide: 3200 });
+  }
 }
 
 /** Afișează discret butonul „Descarcă / Instalează aplicația” în Setări,
