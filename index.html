@@ -8,32 +8,33 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Unghii" />
-<meta name="theme-color" content="#9B2247" />
+<meta name="theme-color" content="#D6336C" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#f7bce0;
+    --bg:#FCF0F5;
     --surface:#FFFFFF;
-    --border:#F0DFD6;
-    --ink:#c4649f;
-    --ink-soft:#b34f8c;
-    --accent:#d656a5;
-    --accent-dark:#ba3085;
-    --accent-soft:#c9579d;
+    --border:#F5D9E6;
+    --ink:#3A2430;
+    --ink-soft:#966E80;
+    --accent:#D6336C;
+    --accent-dark:#A8244F;
+    --accent-soft:#FBDCE6;
+    --accent-2:#C2487B;
     --success:#4C7A5D;
     --success-soft:#E4EEE6;
-    --muted:#B3A29B;
+    --muted:#C9A2B3;
     --warn:#B8860B;
     --info:#2E5F8A;
-    --job-block:#8C7B74;
-    --job-block-soft:#EDE7E3;
+    --job-block:#A8788C;
+    --job-block-soft:#F6E7ED;
     --danger:#D93838;
     --radius-lg:22px;
     --radius-md:14px;
     --radius-sm:9px;
-    --shadow:0 10px 28px rgba(43,33,31,0.10);
+    --shadow:0 10px 28px rgba(58,36,48,0.12);
     --font-display:'Fraunces', serif;
     --font-body:'Work Sans', sans-serif;
   }
@@ -285,12 +286,12 @@
   /* ---------- Sarcini custom / alte activități ---------- */
   .task-card{
     display:flex; gap:14px; align-items:flex-start; background:var(--surface);
-    border:1px dashed var(--border); border-left:4px solid var(--accent-2, #6B4E9C);
+    border:1px dashed var(--border); border-left:4px solid var(--accent-2);
     border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px;
   }
   .task-time{
     flex:none; width:56px; font-family:var(--font-display); font-weight:600;
-    font-size:15px; line-height:1.25; color:var(--accent-2, #6B4E9C); padding-top:1px;
+    font-size:15px; line-height:1.25; color:var(--accent-2); padding-top:1px;
   }
   .task-time small{ display:block; font-weight:400; color:var(--ink-soft); font-size:12px; }
   .task-body{ flex:1; min-width:0; }
@@ -329,6 +330,9 @@
     background:var(--bg); border:1px solid var(--border); border-left:4px solid var(--warn);
     border-radius:var(--radius-md); padding:14px; margin-bottom:10px;
   }
+  .unconf-section-title{ font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:14px 0 8px; }
+  .unconf-section-title:first-child{ margin-top:0; }
+  .past-unresolved-card{ border-left-color:var(--accent-2); }
   .unconf-top{ margin-bottom:12px; }
   .unconf-client{ font-weight:600; font-size:15px; }
   .unconf-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
@@ -682,14 +686,14 @@ const SUPABASE_URL = 'https://mvsgyaojvrlrhvvetzeh.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12c2d5YW9qdnJscmh2dmV0emVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MzI5OTYsImV4cCI6MjEwNTAwODk5Nn0._PLc8dfFh4A_zQjdtZAg_K5zyQSEQUxHX6UX5W2V_wc';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const DEFAULT_SERVICE_COLOR = '#9B2247';
-const PRESET_COLORS = ['#9B2247', '#4C7A5D', '#2E5F8A', '#B8860B', '#6B4E9C', '#C1553A'];
+const DEFAULT_SERVICE_COLOR = '#D6336C';
+const PRESET_COLORS = ['#D6336C', '#4C7A5D', '#2E5F8A', '#B8860B', '#6B4E9C', '#C1553A'];
 const PENDING_APPTS_KEY = 'pending_appointments';
 const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 // Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
 // Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
-const VAPID_PUBLIC_KEY = 'BKiSow8oM73_2zqr9SR8RnVwr_tmFvCbnPTJPiMCQgqDLWiBlvmSWBVAgC6yMB8QIieKY2ydVbL-Z6valmmCLOw';
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -771,13 +775,12 @@ to authenticated
 using (true)
 with check (true);`;
 
-/** Cele 4 ture predefinite pentru „celălalt job” — vezi selectorul din
+/** Cele 3 ture predefinite pentru „celălalt job” — vezi selectorul din
  * Setări → Programul de la celălalt job. */
 const JOB_SHIFT_PRESETS = [
-  { value: '08:00-12:30', start: '08:00', end: '12:30', label: '08:00 – 12:30 (Tura dimineață)' },
-  { value: '08:00-13:00', start: '08:00', end: '13:00', label: '08:00 – 13:00 (Tura dimineață)' },
-  { value: '12:30-21:00', start: '12:30', end: '21:00', label: '12:30 – 21:00 (Tura după-amiază)' },
-  { value: '13:00-21:30', start: '13:00', end: '21:30', label: '13:00 – 21:30 (Tura după-amiază)' },
+  { value: '08:00-16:00', start: '08:00', end: '16:00', label: '08:00 – 16:00' },
+  { value: '12:30-21:00', start: '12:30', end: '21:00', label: '12:30 – 21:00' },
+  { value: '13:00-21:30', start: '13:00', end: '21:30', label: '13:00 – 21:30' },
 ];
 
 const VACATION_PRESET_COLORS = ['#B3A29B', '#D9B9A5', '#A9C6B8', '#B7C4DE', '#D8B7C8', '#E3C878'];
@@ -2612,6 +2615,7 @@ async function renderSettingsScreen(){
 
   renderHoursRows();
   await loadWeekRows();
+  state.paidAmountColumnOk = await paidAmountColumnExists();
   await loadStats();
   await loadVacationsSection();
 }
@@ -3052,12 +3056,21 @@ async function refreshUnconfirmedBadge(){
   const badgeBottom = document.getElementById('unconfirmedBadgeBottom');
   if (!badge && !badgeBottom) return;
   try {
-    const { count, error } = await sb.from('appointments')
-      .select('id', { count: 'exact', head: true })
-      .eq('employee_id', state.employee.id)
-      .eq('status', 'unconfirmed');
-    if (error) throw error;
-    const label = (count && count > 0) ? (count > 99 ? '99+' : String(count)) : null;
+    const [{ count: unconfirmedCount, error: err1 }, { count: pastCount, error: err2 }] = await Promise.all([
+      sb.from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('employee_id', state.employee.id)
+        .eq('status', 'unconfirmed'),
+      sb.from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('employee_id', state.employee.id)
+        .eq('status', 'confirmed')
+        .lt('end_time', new Date().toISOString()),
+    ]);
+    if (err1) throw err1;
+    if (err2) throw err2;
+    const total = (unconfirmedCount || 0) + (pastCount || 0);
+    const label = total > 0 ? (total > 99 ? '99+' : String(total)) : null;
     [badge, badgeBottom].forEach(el => {
       if (!el) return;
       if (label){ el.textContent = label; el.classList.remove('hidden'); }
@@ -3066,13 +3079,17 @@ async function refreshUnconfirmedBadge(){
   } catch (e){ /* offline sau eroare - lăsăm badge-urile cum erau */ }
 }
 
+/** Verificare automată periodică — dacă aplicația rămâne deschisă, o programare
+ * poate „ajunge în trecut” între timp, deci recalculăm badge-ul din când în când. */
+setInterval(refreshUnconfirmedBadge, 5 * 60 * 1000);
+
 function ensureUnconfirmedModal(){
   if (document.getElementById('unconfirmedModal')) return;
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <dialog id="unconfirmedModal">
       <div class="sheet-header">
-        <div class="sheet-title">Programări neconfirmate</div>
+        <div class="sheet-title">De confirmat / de încheiat</div>
         <button class="icon-btn" id="closeUnconfirmedModal">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -3098,29 +3115,77 @@ async function loadUnconfirmedList(){
   listEl.innerHTML = `<div class="spinner"></div>`;
   if (!state.employee){ listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio angajată configurată.</p>`; return; }
   try {
-    const items = await getUnconfirmedAppointments(state.employee.id);
-    if (items.length === 0){
-      listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nicio programare neconfirmată.</p>`;
+    const [unconfirmed, pastUnresolved] = await Promise.all([
+      getUnconfirmedAppointments(state.employee.id),
+      getPastUnresolvedAppointments(state.employee.id),
+    ]);
+
+    if (unconfirmed.length === 0 && pastUnresolved.length === 0){
+      listEl.innerHTML = `<p class="settings-hint" style="margin:0;">Nimic de confirmat sau de încheiat — totul e la zi.</p>`;
       return;
     }
-    listEl.innerHTML = items.map(a => `
-      <div class="unconf-card" data-id="${a.id}">
-        <div class="unconf-top">
-          <div class="unconf-client">${escapeHtml(a.clientName || 'Client')}</div>
-          <div class="unconf-meta">${escapeHtml(a.serviceName || '')} · ${fmtDateHeader(a.startTime)}, ${fmtTime(a.startTime)} - ${fmtTime(a.endTime)}</div>
+
+    const unconfirmedHtml = unconfirmed.length ? `
+      <h3 class="unconf-section-title">De confirmat</h3>
+      ${unconfirmed.map(a => `
+        <div class="unconf-card" data-id="${a.id}">
+          <div class="unconf-top">
+            <div class="unconf-client">${escapeHtml(a.clientName || 'Client')}</div>
+            <div class="unconf-meta">${escapeHtml(a.serviceName || '')} · ${fmtDateHeader(a.startTime)}, ${fmtTime(a.startTime)} - ${fmtTime(a.endTime)}</div>
+          </div>
+          ${reminderActionsHtml(a)}
+          <div class="unconf-actions">
+            <button type="button" class="btn-confirm" data-action="confirm">Confirmă</button>
+            <button type="button" class="btn-decline" data-action="decline">Anulează</button>
+          </div>
         </div>
-        ${reminderActionsHtml(a)}
-        <div class="unconf-actions">
-          <button type="button" class="btn-confirm" data-action="confirm">Confirmă</button>
-          <button type="button" class="btn-decline" data-action="decline">Anulează</button>
+      `).join('')}
+    ` : '';
+
+    const pastHtml = pastUnresolved.length ? `
+      <h3 class="unconf-section-title">De încheiat (programări trecute)</h3>
+      ${pastUnresolved.map(a => `
+        <div class="unconf-card past-unresolved-card" data-id="${a.id}" data-price="${a.servicePrice || 0}">
+          <div class="unconf-top">
+            <div class="unconf-client">Ai finalizat programarea cu ${escapeHtml(a.clientName || 'Client')} (${escapeHtml(a.serviceName || '')})?</div>
+            <div class="unconf-meta">${fmtDateHeader(a.startTime)}, ${fmtTime(a.startTime)} - ${fmtTime(a.endTime)}</div>
+          </div>
+          <div class="unconf-actions">
+            <button type="button" class="btn-confirm" data-action="completed">Finalizată</button>
+            <button type="button" class="btn-decline" data-action="cancelled">Anulată</button>
+          </div>
+          <div class="finalize-row hidden" data-role="finalize-row">
+            <input type="number" min="0" step="0.01" data-role="paid-amount" value="${a.servicePrice || 0}" />
+            <button type="button" class="btn-primary" data-role="confirm-amount">Salvează</button>
+          </div>
         </div>
-      </div>
-    `).join('');
-    listEl.querySelectorAll('.unconf-card').forEach(card => {
+      `).join('')}
+    ` : '';
+
+    listEl.innerHTML = unconfirmedHtml + pastHtml;
+
+    listEl.querySelectorAll('.unconf-card:not(.past-unresolved-card)').forEach(card => {
       const id = card.dataset.id;
       card.querySelector('[data-action="confirm"]').addEventListener('click', () => handleUnconfirmedAction(id, 'confirmed', card));
       card.querySelector('[data-action="decline"]').addEventListener('click', () => handleUnconfirmedAction(id, 'cancelled', card));
     });
+
+    listEl.querySelectorAll('.past-unresolved-card').forEach(card => {
+      const id = card.dataset.id;
+      const finalizeRow = card.querySelector('[data-role="finalize-row"]');
+      card.querySelector('[data-action="cancelled"]').addEventListener('click', () => handlePastUnresolvedCancel(id, card));
+      card.querySelector('[data-action="completed"]').addEventListener('click', () => {
+        finalizeRow.classList.remove('hidden');
+        card.querySelector('[data-action="completed"]').disabled = true;
+        card.querySelector('[data-action="cancelled"]').disabled = true;
+        finalizeRow.querySelector('[data-role="paid-amount"]').focus();
+      });
+      finalizeRow.querySelector('[data-role="confirm-amount"]').addEventListener('click', () => {
+        const amount = parseFloat(finalizeRow.querySelector('[data-role="paid-amount"]').value);
+        handlePastUnresolvedFinalize(id, isNaN(amount) ? 0 : amount, card);
+      });
+    });
+
     wireReminderCopyButtons(listEl);
   } catch (e){
     listEl.innerHTML = `<p class="error-text">${isNetworkError(e) ? 'Fără conexiune — lista nu poate fi încărcată acum.' : 'Eroare: ' + escapeHtml(e.message || e)}</p>`;
@@ -3150,7 +3215,57 @@ async function handleUnconfirmedAction(id, newStatus, cardEl){
   }
 }
 
-/* ====================== MODAL: URMEAZĂ (14 ZILE) ====================== */
+async function handlePastUnresolvedCancel(id, cardEl){
+  const buttons = cardEl.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+  const toastId = showToast('Se anulează…', 'saving', { persist: true });
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  try {
+    await updateAppointmentRow(id, { status: 'cancelled' });
+    if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'cancelled' };
+    cardEl.remove();
+    updateToast(toastId, 'Programare anulată.', 'success', 1800);
+    refreshAfterPastResolution();
+  } catch (e){
+    buttons.forEach(b => b.disabled = false);
+    updateToast(toastId, 'Eroare: ' + (e.message || e), 'error', 3000);
+  }
+}
+
+async function handlePastUnresolvedFinalize(id, amount, cardEl){
+  const buttons = cardEl.querySelectorAll('button, input');
+  buttons.forEach(b => b.disabled = true);
+  const toastId = showToast('Se salvează…', 'saving', { persist: true });
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  try {
+    await updateAppointmentRow(id, { status: 'completed', paid_amount: amount });
+    if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'completed', paidAmount: amount };
+    cardEl.remove();
+    updateToast(toastId, 'Programare finalizată — venit înregistrat.', 'success', 2200);
+    refreshAfterPastResolution();
+  } catch (e){
+    buttons.forEach(b => b.disabled = false);
+    const missingColumn = e && (e.code === '42703' || (e.message || '').toLowerCase().includes('paid_amount'));
+    updateToast(toastId, missingColumn
+      ? 'Coloana paid_amount lipsește încă din Supabase — rulează SQL-ul din Setări → Statistici.'
+      : 'Eroare: ' + (e.message || e), 'error', 4200);
+  }
+}
+
+/** Comun pentru cele două acțiuni de mai sus: reface starea vizuală după ce
+ * o programare trecută a fost rezolvată (badge, agendă, calendar, statistici). */
+function refreshAfterPastResolution(){
+  if (!document.querySelector('#unconfirmedList .unconf-card')){
+    document.getElementById('unconfirmedList').innerHTML = `<p class="settings-hint" style="margin:0;">Nimic de confirmat sau de încheiat — totul e la zi.</p>`;
+  }
+  refreshUnconfirmedBadge();
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+  if (document.getElementById('statsBody')) loadStats();
+}
+
+/* ====================== MODAL: URMEAZA (14 ZILE) ====================== */
 function ensureUpcomingModal(){
   if (document.getElementById('upcomingModal')) return;
   const wrap = document.createElement('div');
@@ -3320,28 +3435,29 @@ async function loadWeekRows(){
     const key = ymd(d);
     const existing = blocksByDate[key];
     const off = !existing;
+    const existingStartHHMM = existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : '';
+    const existingEndHHMM = existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : '';
+    const matchedPreset = JOB_SHIFT_PRESETS.find(p => p.start === existingStartHHMM && p.end === existingEndHHMM);
     return `
       <div class="wd-row" data-date="${key}">
         <div class="wd-row-top">
           <div class="wd-label">${label}<span class="wd-date">${fmtDateShort(d)}</span></div>
           <label class="wd-off"><input type="checkbox" class="wk-off" ${off ? 'checked' : ''} /> Liber</label>
         </div>
-        <div class="wd-times">
-          <input type="time" class="time-input wk-start" value="${existing ? minutesToHHMM(existing.start.getHours()*60+existing.start.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
-          <span class="wd-sep">–</span>
-          <input type="time" class="time-input wk-end" value="${existing ? minutesToHHMM(existing.end.getHours()*60+existing.end.getMinutes()) : ''}" ${off ? 'disabled' : ''} />
-        </div>
+        <select class="wk-shift-select" ${off ? 'disabled' : ''}>
+          <option value="">Alege tura…</option>
+          ${JOB_SHIFT_PRESETS.map(p => `<option value="${p.value}" ${matchedPreset && matchedPreset.value === p.value ? 'selected' : ''}>${p.label}</option>`).join('')}
+        </select>
       </div>
     `;
   }).join('');
 
   wrap.querySelectorAll('.wd-row').forEach(row => {
     const offCb = row.querySelector('.wk-off');
-    const startInp = row.querySelector('.wk-start');
-    const endInp = row.querySelector('.wk-end');
+    const shiftSelect = row.querySelector('.wk-shift-select');
     offCb.addEventListener('change', () => {
-      startInp.disabled = offCb.checked; endInp.disabled = offCb.checked;
-      if (offCb.checked){ startInp.value = ''; endInp.value = ''; }
+      shiftSelect.disabled = offCb.checked;
+      if (offCb.checked) shiftSelect.value = '';
     });
   });
 }
@@ -3362,11 +3478,12 @@ async function saveWeek(){
     const [yy, mm, dd] = dateKey.split('-').map(Number);
     const day = new Date(yy, mm - 1, dd);
     const off = row.querySelector('.wk-off').checked;
-    const startVal = row.querySelector('.wk-start').value;
-    const endVal = row.querySelector('.wk-end').value;
+    const shiftVal = row.querySelector('.wk-shift-select').value;
+    const preset = JOB_SHIFT_PRESETS.find(p => p.value === shiftVal);
     try {
-      if (off || !startVal || !endVal){ await clearDayJobBlock(state.employee.id, day); continue; }
-      if (hhmmToMinutes(endVal) <= hhmmToMinutes(startVal)){ problems.push(`${fmtDateShort(day)}: ora de sfârșit trebuie să fie după cea de început.`); continue; }
+      if (off || !preset){ await clearDayJobBlock(state.employee.id, day); continue; }
+      const startVal = preset.start;
+      const endVal = preset.end;
       const dayStart = new Date(yy, mm - 1, dd, 0, 0);
       const dayEnd = new Date(yy, mm - 1, dd, 23, 59);
       const appts = await getAppointments({ employeeId: state.employee.id, from: dayStart, to: dayEnd });
@@ -3888,19 +4005,35 @@ function loadStats(){
   const m = statsState.month.getMonth();
   const priceById = new Map(state.services.map(s => [s.id, Number(s.price) || 0]));
 
-  const active = cache.appointments.filter(a =>
+  // Venitul total ia în calcul EXCLUSIV programările Finalizate (status='completed').
+  // Cele anulate sau doar confirmate/neconfirmate nu contează ca venit încasat.
+  const completed = cache.appointments.filter(a =>
     a.employeeId === state.employee.id &&
     a.startTime.getFullYear() === y && a.startTime.getMonth() === m &&
-    (a.status === 'confirmed' || a.status === 'completed')
+    a.status === 'completed'
   );
-  const total = active.reduce((sum, a) => sum + (priceById.get(a.serviceId) || 0), 0);
-  const distinctClients = new Set(active.map(a => a.clientId)).size;
+  const total = completed.reduce((sum, a) => {
+    const amount = (a.paidAmount != null) ? a.paidAmount : (priceById.get(a.serviceId) || 0);
+    return sum + amount;
+  }, 0);
+  const distinctClients = new Set(completed.map(a => a.clientId)).size;
+
+  const setupNote = state.paidAmountColumnOk ? '' : `
+    <div class="setup-note">
+      Coloana <code>paid_amount</code> nu există încă pe <code>appointments</code> — până o adaugi,
+      venitul se calculează din prețul standard al serviciului. Rulează o dată în
+      <strong>Supabase → SQL Editor</strong>:
+      <pre>${escapeHtml(PAID_AMOUNT_SETUP_SQL)}</pre>
+      <button class="btn-outline" id="copyPaidAmountSqlBtn" type="button">Copiază SQL</button>
+    </div>
+  `;
 
   body.innerHTML = `
+    ${setupNote}
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value">${total.toLocaleString('ro-RO')} lei</div>
-        <div class="stat-label">Venit total</div>
+        <div class="stat-label">Venit total (programări finalizate)</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">${distinctClients}</div>
@@ -3908,6 +4041,14 @@ function loadStats(){
       </div>
     </div>
   `;
+
+  if (!state.paidAmountColumnOk){
+    const btn = document.getElementById('copyPaidAmountSqlBtn');
+    if (btn) btn.addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(PAID_AMOUNT_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+  }
 }
 
 /* ====================== MODAL: PROGRAMARE NOUĂ ====================== */
@@ -4678,7 +4819,7 @@ function generateAppIconDataUri(size){
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#9B2247';
+  ctx.fillStyle = '#D6336C';
   ctx.beginPath();
   ctx.roundRect ? ctx.roundRect(0, 0, size, size, size * 0.22) : ctx.rect(0, 0, size, size);
   ctx.fill();
@@ -4702,8 +4843,8 @@ function injectPwaManifest(){
       scope: location.pathname,
       display: 'standalone',
       orientation: 'portrait',
-      background_color: '#FBF3EE',
-      theme_color: '#9B2247',
+      background_color: '#FCF0F5',
+      theme_color: '#D6336C',
       icons: [
         { src: generateAppIconDataUri(192), sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
         { src: generateAppIconDataUri(512), sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
