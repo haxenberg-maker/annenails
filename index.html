@@ -30,6 +30,7 @@
     --info:#2E5F8A;
     --job-block:#A8788C;
     --job-block-soft:#F6E7ED;
+    --job-block-dot:#262626;
     --danger:#D93838;
     --radius-lg:22px;
     --radius-md:14px;
@@ -192,7 +193,7 @@
     position:absolute; bottom:2px; left:0; right:0;
     display:flex; flex-wrap:nowrap; gap:3px; align-items:center; justify-content:center;
   }
-  .day-dot{ width:4px; height:4px; border-radius:50%; flex:none; }
+  .day-dot{ width:5.5px; height:5.5px; border-radius:50%; flex:none; }
   .cal-cell.selected .day-dot{ background:#fff !important; opacity:.9; }
   .cal-today-btn{
     margin-top:14px; width:100%; padding:9px; border-radius:var(--radius-sm); border:1px solid var(--border);
@@ -1729,6 +1730,11 @@ async function cancelAppointment(id){
   if (error) throw error;
 }
 
+async function deleteAppointmentRow(id){
+  const { error } = await sb.from('appointments').delete().eq('id', id);
+  if (error) throw error;
+}
+
 async function updateAppointmentRow(id, payload){
   const { error } = await sb.from('appointments').update(payload).eq('id', id);
   if (error){
@@ -2344,7 +2350,7 @@ function computeMonthDayColorsFromCache(){
       .forEach(a => push(ymd(a.startTime), a.serviceColor));
     cache.jobBlocks
       .filter(b => b.employeeId === state.employee.id && b.start.getFullYear() === y && b.start.getMonth() === m)
-      .forEach(b => push(ymd(b.start), 'var(--job-block)'));
+      .forEach(b => push(ymd(b.start), 'var(--job-block-dot)'));
     const monthStart = new Date(y, m, 1);
     const monthEnd = new Date(y, m + 1, 0);
     // Sarcinile custom pot acoperi mai multe zile — punem bulina lor pe fiecare
@@ -2639,6 +2645,37 @@ async function cancelAppointmentOptimistic(id){
     computeMonthDayColorsFromCache();
     renderCalendar();
     updateToast(toastId, 'Eroare la anulare — s-a revenit la starea anterioară: ' + (e.message || e), 'error', 3600);
+  }
+  return true;
+}
+
+/** Șterge DEFINITIV o programare din baza de date (nu doar o marchează
+ * anulată) — cache-ul + UI-ul se actualizează instant, apoi cererea se
+ * trimite în fundal către Supabase. La eroare, readuce programarea în cache. */
+async function deleteAppointmentOptimistic(id){
+  if (!(await confirmDialog({
+    title: 'Ștergi definitiv programarea?',
+    message: 'Această acțiune nu poate fi anulată — programarea va fi eliminată complet, nu doar marcată ca anulată.',
+    confirmLabel: 'Șterge programarea', cancelLabel: 'Renunță',
+  }))) return false;
+  const idx = cache.appointments.findIndex(a => a.id === id);
+  const removed = idx >= 0 ? cache.appointments[idx] : null;
+  if (idx >= 0) cache.appointments.splice(idx, 1);
+  renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
+
+  const toastId = showToast('Se șterge…', 'saving', { persist: true });
+  try {
+    await deleteAppointmentRow(id);
+    updateToast(toastId, 'Programare ștearsă definitiv.', 'success', 1800);
+    refreshUnconfirmedBadge();
+  } catch (e){
+    if (removed) cache.appointments.push(removed);
+    renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
+    updateToast(toastId, 'Eroare la ștergere — programarea a fost readusă: ' + (e.message || e), 'error', 3600);
   }
   return true;
 }
@@ -5042,7 +5079,7 @@ function ensureEditModal(){
       <div class="sheet-footer">
         <p class="error-text hidden" id="editModalError"></p>
         <div class="edit-footer-row">
-          <button type="button" class="btn-danger btn-icon-only" id="deleteEditAppt" title="Șterge / Anulează programarea">
+          <button type="button" class="btn-danger btn-icon-only" id="deleteEditAppt" title="Șterge definitiv programarea">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
             </svg>
@@ -5096,8 +5133,8 @@ function wireEditModal(){
   });
   document.getElementById('deleteEditAppt').addEventListener('click', async () => {
     const id = editState.apptId;
-    const cancelled = await cancelAppointmentOptimistic(id);
-    if (cancelled) document.getElementById('editModal').close();
+    const deleted = await deleteAppointmentOptimistic(id);
+    if (deleted) document.getElementById('editModal').close();
   });
   document.getElementById('saveEditAppt').addEventListener('click', saveEditAppointment);
 }
