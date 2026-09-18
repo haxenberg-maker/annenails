@@ -23,11 +23,14 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Extensiile de Chrome (traducere, password manager etc.) pot declanșa
+  // cereri cu scheme necache-uibile (chrome-extension://) — le ignorăm.
+  if (!event.request.url.startsWith('http')) return;
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       fetch(event.request)
         .then((networkResp) => {
-          cache.put(event.request, networkResp.clone());
+          cache.put(event.request, networkResp.clone()).catch(() => {});
           return networkResp;
         })
         .catch(() => cache.match(event.request))
