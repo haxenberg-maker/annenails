@@ -254,7 +254,10 @@
   }
 
   /* ---------- Dialog de confirmare custom (înlocuiește window.confirm) ---------- */
-  #confirmDialog{ max-width:360px; }
+  #confirmDialog{
+    max-width:360px; padding:20px; background:var(--surface); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); border:1px solid var(--border);
+  }
   .confirm-body{ padding:4px 2px 18px; }
   .confirm-title{ font-family:var(--font-display); font-size:17px; font-weight:600; margin-bottom:8px; }
   .confirm-message{ font-size:14px; color:var(--ink-soft); line-height:1.45; }
@@ -265,6 +268,18 @@
     background:var(--danger); color:#fff; border:none; font-size:15px; font-weight:600;
   }
   .btn-danger:hover{ opacity:.9; }
+  /* ---------- Selector custom de status (pastile, nu <select> nativ) ---------- */
+  .status-pills{ display:flex; flex-wrap:wrap; gap:8px; }
+  .status-pill{
+    flex:1 1 auto; min-width:100px; text-align:center; padding:10px 10px;
+    border-radius:999px; border:1.5px solid var(--border); background:var(--surface);
+    color:var(--ink-soft); font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .status-pill:hover{ border-color:var(--accent); }
+  .status-pill.active[data-status="confirmed"]{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .status-pill.active[data-status="unconfirmed"]{ background:var(--warn); border-color:var(--warn); color:#fff; }
+  .status-pill.active[data-status="completed"]{ background:var(--success); border-color:var(--success); color:#fff; }
+  .status-pill.active[data-status="cancelled"]{ background:var(--muted); border-color:var(--muted); color:#fff; }
   .appt-cancel{
     flex:none; width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
     background:var(--surface); color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
@@ -755,7 +770,7 @@ const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 // Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
 // Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
-const VAPID_PUBLIC_KEY = 'BKiSow8oM73_2zqr9SR8RnVwr_tmFvCbnPTJPiMCQgqDLWiBlvmSWBVAgC6yMB8QIieKY2ydVbL-Z6valmmCLOw';
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -2139,6 +2154,7 @@ function ensureConfirmDialog(){
     </dialog>
   `;
   document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('confirmDialog'));
 }
 
 /** Înlocuiește window.confirm() cu un <dialog> stilizat, integrat în design.
@@ -2595,7 +2611,7 @@ async function deleteCustomTaskOptimistic(id){
  * trimite cererea către Supabase în fundal. La eroare, revine la starea
  * anterioară și anunță utilizatorul. */
 async function cancelAppointmentOptimistic(id){
-  if (!(await confirmDialog({ title: 'Anulezi programarea?', message: 'Clienta nu va mai apărea în agendă la ora respectivă.', confirmLabel: 'Anulează programarea', cancelLabel: 'Renunță' }))) return;
+  if (!(await confirmDialog({ title: 'Anulezi programarea?', message: 'Clienta nu va mai apărea în agendă la ora respectivă.', confirmLabel: 'Anulează programarea', cancelLabel: 'Renunță' }))) return false;
   const idx = cache.appointments.findIndex(a => a.id === id);
   const previous = idx >= 0 ? { ...cache.appointments[idx] } : null;
   if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'cancelled' };
@@ -2615,6 +2631,7 @@ async function cancelAppointmentOptimistic(id){
     renderCalendar();
     updateToast(toastId, 'Eroare la anulare — s-a revenit la starea anterioară: ' + (e.message || e), 'error', 3600);
   }
+  return true;
 }
 
 /* ====================== CLIENT PICKER (reutilizat în Add & Edit) ====================== */
@@ -3193,8 +3210,15 @@ function ensureClientDetailModal(){
 }
 
 async function getClientHistory(clientId){
+  // Verificăm dacă coloana paid_amount există deja (poate fi adăugată mai
+  // târziu via SQL-ul din Setări → Statistici) — evită o eroare 42703 pentru
+  // cine nu a rulat încă migrarea.
+  const paidOk = await paidAmountColumnExists();
+  const cols = paidOk
+    ? 'start_time, end_time, status, paid_amount, services(name, price)'
+    : 'start_time, end_time, status, services(name, price)';
   const { data, error } = await sb.from('appointments')
-    .select('start_time, end_time, status, services(name, price)')
+    .select(cols)
     .eq('client_id', clientId)
     .order('start_time', { ascending: false });
   if (error) throw error;
@@ -3203,7 +3227,12 @@ async function getClientHistory(clientId){
     endTime: new Date(r.end_time),
     status: r.status,
     serviceName: r.services ? r.services.name : '—',
-    price: r.services ? Number(r.services.price) || 0 : 0,
+    // Suma reală încasată (paid_amount) are prioritate; dacă nu a fost
+    // înregistrată (programare neterminată încă, sau salvată înainte de
+    // migrare), cade pe prețul de listă al serviciului.
+    price: (r.paid_amount != null && r.paid_amount !== '')
+      ? Number(r.paid_amount)
+      : (r.services ? Number(r.services.price) || 0 : 0),
   }));
 }
 
@@ -4961,13 +4990,14 @@ function ensureEditModal(){
           <p class="hint-text hidden" id="editSlotsHint"></p>
         </div>
         <div class="field">
-          <label for="editStatusSelect">Status</label>
-          <select id="editStatusSelect">
-            <option value="unconfirmed">Neconfirmată</option>
-            <option value="confirmed">Confirmată</option>
-            <option value="completed">Finalizată</option>
-            <option value="cancelled">Anulată</option>
-          </select>
+          <label>Status</label>
+          <div class="status-pills" id="editStatusPills">
+            <button type="button" class="status-pill" data-status="confirmed">Confirmată</button>
+            <button type="button" class="status-pill" data-status="unconfirmed">Neconfirmată</button>
+            <button type="button" class="status-pill" data-status="completed">Finalizată</button>
+            <button type="button" class="status-pill" data-status="cancelled">Anulată</button>
+          </div>
+          <input type="hidden" id="editStatusSelect" value="unconfirmed" />
         </div>
         <div class="field">
           <label for="editNotes">Notițe</label>
@@ -4976,6 +5006,7 @@ function ensureEditModal(){
       </div>
       <div class="sheet-footer">
         <p class="error-text hidden" id="editModalError"></p>
+        <button type="button" class="btn-danger" id="deleteEditAppt" style="margin-bottom:10px;">Șterge / Anulează programarea</button>
         <button class="btn-primary" id="saveEditAppt">Salvează modificările</button>
       </div>
     </dialog>
@@ -5015,7 +5046,25 @@ function wireEditModal(){
     onChange: () => {},
   });
   wireNewClientBox('edit', { onCreated: () => {} });
+  document.querySelectorAll('#editStatusPills .status-pill').forEach(btn => {
+    btn.addEventListener('click', () => setEditStatusPill(btn.dataset.status));
+  });
+  document.getElementById('deleteEditAppt').addEventListener('click', async () => {
+    const id = editState.apptId;
+    const cancelled = await cancelAppointmentOptimistic(id);
+    if (cancelled) document.getElementById('editModal').close();
+  });
   document.getElementById('saveEditAppt').addEventListener('click', saveEditAppointment);
+}
+
+/** Activează pastila corespunzătoare statusului și actualizează valoarea
+ * din câmpul ascuns #editStatusSelect (citit la salvare). */
+function setEditStatusPill(status){
+  const hidden = document.getElementById('editStatusSelect');
+  if (hidden) hidden.value = status;
+  document.querySelectorAll('#editStatusPills .status-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === status);
+  });
 }
 
 /** Afișează avertismentul de concediu în modalul de editare, pentru ziua
@@ -5125,7 +5174,7 @@ async function openEditModal(appt){
 
   document.getElementById('editDateLabelText').textContent = fmtDateHeader(editState.day);
   document.getElementById('editDate').value = ymd(editState.day);
-  document.getElementById('editStatusSelect').value = appt.status;
+  setEditStatusPill(appt.status);
   document.getElementById('editNotes').value = appt.notes || '';
   document.getElementById('editModalError').classList.add('hidden');
 
