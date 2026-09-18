@@ -188,12 +188,12 @@
     width:26px; height:26px; box-sizing:border-box;
     font-variant-numeric:tabular-nums; line-height:1; font-weight:600;
   }
-  .cal-lines{
-    position:absolute; bottom:4px; left:15%; right:15%; height:3px;
-    display:flex; gap:1.5px; align-items:flex-end;
+  .dots-container{
+    position:absolute; bottom:4px; left:0; right:0;
+    display:flex; flex-wrap:nowrap; gap:3px; align-items:center; justify-content:center;
   }
-  .cal-line{ flex:1; height:3px; border-radius:2px; min-width:2px; }
-  .cal-cell.selected .cal-line{ background:#fff !important; opacity:.85; }
+  .day-dot{ width:4px; height:4px; border-radius:50%; flex:none; }
+  .cal-cell.selected .day-dot{ background:#fff !important; opacity:.9; }
   .cal-today-btn{
     margin-top:14px; width:100%; padding:9px; border-radius:var(--radius-sm); border:1px solid var(--border);
     background:var(--bg); font-size:13px; font-weight:600; color:var(--ink-soft);
@@ -318,7 +318,8 @@
   }
   .task-time small{ display:block; font-weight:400; color:var(--ink-soft); font-size:12px; }
   .task-body{ flex:1; min-width:0; }
-  .task-title{ font-weight:600; font-size:14px; color:var(--ink); }
+  .task-title{ font-weight:600; font-size:14px; color:var(--ink); display:flex; align-items:center; gap:7px; }
+  .task-color-dot{ width:9px; height:9px; border-radius:50%; flex:none; }
   .task-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
 
   /* ---------- Panou „Urmează” (14 zile) ---------- */
@@ -754,7 +755,7 @@ const PENDING_CLIENTS_KEY = 'pending_clients';
 const NOTIF_LEAD_KEY = 'notif_lead_minutes';
 // Cheia PUBLICĂ VAPID (generată o singură dată, vezi instrucțiunile trimise).
 // Aceasta e sigur să stea în codul client — cea PRIVATĂ rămâne doar în Supabase Edge Function.
-const VAPID_PUBLIC_KEY = 'BKiSow8oM73_2zqr9SR8RnVwr_tmFvCbnPTJPiMCQgqDLWiBlvmSWBVAgC6yMB8QIieKY2ydVbL-Z6valmmCLOw';
+const VAPID_PUBLIC_KEY = 'PUNE_AICI_CHEIA_PUBLICA_VAPID';
 
 const WEEKDAY_HOURS_SETUP_SQL =
 `create table if not exists public.weekday_hours (
@@ -824,6 +825,7 @@ const CUSTOM_TASKS_SETUP_SQL =
   title text not null,
   start_time timestamptz not null,
   end_time timestamptz not null,
+  color text not null default '#8B5CF6',
   created_at timestamptz not null default now()
 );
 
@@ -1527,6 +1529,18 @@ async function clearDayJobBlock(employeeId, day){
 
 /** Presetul de intervale pentru mementouri personalizate per programare —
  * vezi butonul cu ceas de pe fiecare card de programare. */
+/** Cele 6 culori predefinite pentru sarcini custom / alte activități —
+ * vezi selectorul din modalul „Sarcină nouă”. Implicit: Mov. */
+const CUSTOM_TASK_COLORS = [
+  { value: '#D6336C', label: 'Roz' },
+  { value: '#F59E0B', label: 'Galben' },
+  { value: '#10B981', label: 'Verde' },
+  { value: '#3B82F6', label: 'Albastru' },
+  { value: '#F97316', label: 'Portocaliu' },
+  { value: '#8B5CF6', label: 'Mov' },
+];
+const DEFAULT_TASK_COLOR = '#8B5CF6';
+
 const PUSH_REMINDER_PRESETS = [
   { label: '15 min', minutes: 15 },
   { label: '30 min', minutes: 30 },
@@ -1564,9 +1578,10 @@ async function getCustomTasks({ employeeId, from, to }){
   return data;
 }
 
-async function createCustomTask({ employeeId, title, start, end }){
+async function createCustomTask({ employeeId, title, start, end, color }){
   const { error } = await sb.from('custom_tasks').insert({
     employee_id: employeeId, title, start_time: start.toISOString(), end_time: end.toISOString(),
+    color: color || DEFAULT_TASK_COLOR,
   });
   if (error) throw error;
 }
@@ -1769,6 +1784,7 @@ async function loadApptsAndBlocksRange(from, to){
   }));
   const tasks = tasksRaw.map(t => ({
     id: t.id, employeeId: t.employee_id, start: new Date(t.start_time), end: new Date(t.end_time), title: t.title,
+    color: t.color || DEFAULT_TASK_COLOR,
   }));
   return { appts, blocks, tasks };
 }
@@ -2009,6 +2025,7 @@ function renderAppShell(){
   document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
   document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
   wireCalendarSwipe();
+  wireDayContentSwipe();
   document.getElementById('todayBtn').addEventListener('click', async () => {
     const t = new Date();
     const monthChanged = !state.calendarMonth || t.getFullYear() !== state.calendarMonth.getFullYear() || t.getMonth() !== state.calendarMonth.getMonth();
@@ -2206,6 +2223,46 @@ function wireCalendarSwipe(){
   }, { passive: true });
 }
 
+/** Schimbă ziua selectată cu `delta` zile (±1), sincronizând și luna
+ * calendarului dacă noua zi cade în altă lună. */
+async function changeDay(delta){
+  const d = new Date(state.selectedDay);
+  d.setDate(d.getDate() + delta);
+  const monthChanged = !state.calendarMonth || d.getFullYear() !== state.calendarMonth.getFullYear() || d.getMonth() !== state.calendarMonth.getMonth();
+  if (monthChanged){
+    state.calendarMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+    await loadMonthDots();
+  }
+  setDay(d);
+}
+
+/** Swipe stânga/dreapta pe agenda zilei → zi următoare/anterioară.
+ * Același prag și aceeași protecție împotriva scroll-ului vertical ca la
+ * swipe-ul de pe calendar. */
+function wireDayContentSwipe(){
+  const el = document.getElementById('dayContent');
+  if (!el || el.dataset.swipeWired) return;
+  el.dataset.swipeWired = '1';
+  const SWIPE_THRESHOLD = 50;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  el.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
+  }, { passive: true });
+
+  el.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    if (deltaX < -SWIPE_THRESHOLD) changeDay(1);
+    else if (deltaX > SWIPE_THRESHOLD) changeDay(-1);
+  }, { passive: true });
+}
+
 function setDay(d){
   state.selectedDay = d;
   refreshHeaderInfo();
@@ -2233,11 +2290,11 @@ function renderCalendar(){
     const vacColor = state.vacationDaysInMonth.get(key);
     const cls = ['cal-cell', isSameDay(d, state.selectedDay) ? 'selected' : '', isSameDay(d, today) ? 'today' : '', vacColor ? 'vacation' : ''].join(' ').trim();
     const colors = state.monthDayColors.get(key) || [];
-    const lines = colors.slice(0, 6).map(c => `<span class="cal-line" style="background:${c}"></span>`).join('');
+    const dots = colors.slice(0, 6).map(c => `<span class="day-dot" style="background:${c}"></span>`).join('');
     const tintStyle = vacColor ? ` style="--vac-tint:${hexToRgba(vacColor, 0.22)}"` : '';
     html += `<button type="button" class="${cls}" data-date="${key}"${tintStyle}>
       <span class="cal-daynum">${day}</span>
-      ${lines ? `<span class="cal-lines">${lines}</span>` : ''}
+      ${dots ? `<span class="dots-container">${dots}</span>` : ''}
     </button>`;
   }
   grid.innerHTML = html;
@@ -2265,6 +2322,16 @@ function computeMonthDayColorsFromCache(){
       .forEach(b => push(ymd(b.start), 'var(--job-block)'));
     const monthStart = new Date(y, m, 1);
     const monthEnd = new Date(y, m + 1, 0);
+    // Sarcinile custom pot acoperi mai multe zile — punem bulina lor pe fiecare
+    // zi din interval care cade în luna afișată.
+    cache.customTasks.filter(t => t.employeeId === state.employee.id).forEach(t => {
+      const cur = new Date(Math.max(t.start.getTime(), monthStart.getTime()));
+      const end = new Date(Math.min(t.end.getTime(), monthEnd.getTime()));
+      while (cur <= end){
+        push(ymd(cur), t.color || DEFAULT_TASK_COLOR);
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
     cache.vacations.filter(v => v.employeeId === state.employee.id).forEach(v => {
       const cur = new Date(Math.max(v.start.getTime(), monthStart.getTime()));
       const end = new Date(Math.min(v.end.getTime(), monthEnd.getTime()));
@@ -2411,11 +2478,12 @@ function renderAppointmentList(vac){
       } else {
         timeTop = 'toată'; timeBottom = 'ziua';
       }
+      const taskColor = t.color || '#8B5CF6';
       return `
-        <div class="task-card ${past ? 'past-item' : ''}">
+        <div class="task-card ${past ? 'past-item' : ''}" style="border-left-color:${taskColor}">
           <div class="task-time">${timeTop}<small>${timeBottom}</small></div>
           <div class="task-body">
-            <div class="task-title">${escapeHtml(t.title)}</div>
+            <div class="task-title"><span class="task-color-dot" style="background:${taskColor}"></span>${escapeHtml(t.title)}</div>
             <div class="task-sub">${isMultiDay ? `Sarcină pe mai multe zile (${fmtDateShort(t.start)} – ${fmtDateShort(t.end)})` : 'Sarcină / altă activitate'}</div>
           </div>
           <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
@@ -2510,11 +2578,15 @@ async function deleteCustomTaskOptimistic(id){
   const previous = idx >= 0 ? cache.customTasks[idx] : null;
   if (idx >= 0) cache.customTasks.splice(idx, 1);
   renderDayFromCache();
+  computeMonthDayColorsFromCache();
+  renderCalendar();
   try {
     await deleteCustomTask(id);
   } catch (e){
     if (previous) cache.customTasks.splice(idx, 0, previous);
     renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
     showToast('Eroare la ștergerea sarcinii: ' + (e.message || e), 'error', { autoHide: 3000 });
   }
 }
@@ -2921,6 +2993,7 @@ function renderVacationsList(){
       cache.vacations = cache.vacations.filter(v => v.id !== id);
       renderVacationsList();
       computeMonthDayColorsFromCache(); renderCalendar();
+      renderDayFromCache();
       try {
         await deleteVacation(id);
         showToast('Concediu șters.', 'success', { autoHide: 1800 });
@@ -2928,6 +3001,7 @@ function renderVacationsList(){
         cache.vacations = prevList;
         renderVacationsList();
         computeMonthDayColorsFromCache(); renderCalendar();
+        renderDayFromCache();
         showToast('Eroare la ștergere: ' + (e.message || e), 'error', { autoHide: 3000 });
       }
     });
@@ -2961,6 +3035,7 @@ async function saveNewVacation(){
     document.querySelectorAll('#vacPresetSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
     renderVacationsList();
     computeMonthDayColorsFromCache(); renderCalendar();
+    renderDayFromCache();
     okEl.textContent = 'Concediu adăugat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Concediu adăugat.', 'success', 1800);
   } catch (e){
@@ -4544,6 +4619,8 @@ function openPushReminderModal(appt){
       btn.disabled = true;
       try {
         await createCustomReminder({ appointmentId: appt.id, employeeId: appt.employeeId, scheduledSendAt: sendAt });
+        cache.reminderApptIds.add(appt.id);
+        renderDayFromCache();
         const inPast = sendAt.getTime() <= Date.now();
         showToast(
           inPast
@@ -4554,6 +4631,13 @@ function openPushReminderModal(appt){
         );
         dlg.close();
       } catch (e){
+        if (e.code === 'ALREADY_SCHEDULED'){
+          showToast('Există deja un memento programat exact la această oră pentru această programare.', 'info', { autoHide: 3200 });
+          cache.reminderApptIds.add(appt.id);
+          renderDayFromCache();
+          dlg.close();
+          return;
+        }
         noteEl.textContent = 'Eroare: ' + (e.message || e);
         noteEl.classList.add('error-text');
       } finally {
@@ -4596,6 +4680,13 @@ function ensureNewTaskModal(){
           <input type="time" class="time-input" id="taskEnd" placeholder="opțional" />
         </div>
         <p class="settings-hint" style="margin-top:4px;">Dacă nu completezi ora de sfârșit, punem automat o oră mai târziu (sau sfârșitul zilei, pentru sarcini pe mai multe zile).</p>
+        <div class="field">
+          <label>Culoare</label>
+          <div class="preset-swatches" id="taskColorSwatches">
+            ${CUSTOM_TASK_COLORS.map(c => `<span class="preset-swatch ${c.value === DEFAULT_TASK_COLOR ? 'active' : ''}" data-color="${c.value}" style="background:${c.value}" title="${c.label}"></span>`).join('')}
+          </div>
+          <input type="hidden" id="taskColor" value="${DEFAULT_TASK_COLOR}" />
+        </div>
         <p class="error-text hidden" id="newTaskError"></p>
         <button class="btn-primary" id="saveNewTaskBtn" style="margin-top:14px;">Salvează sarcina</button>
       </div>
@@ -4605,6 +4696,13 @@ function ensureNewTaskModal(){
   wireDialogBackdropClose(document.getElementById('newTaskModal'));
   document.getElementById('closeNewTaskModal').addEventListener('click', () => document.getElementById('newTaskModal').close());
   document.getElementById('saveNewTaskBtn').addEventListener('click', saveNewTask);
+  document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      document.getElementById('taskColor').value = sw.dataset.color;
+      document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+    });
+  });
 }
 
 async function openNewTaskModal(){
@@ -4617,6 +4715,8 @@ async function openNewTaskModal(){
   document.getElementById('taskEndDate').value = '';
   document.getElementById('taskStart').value = '';
   document.getElementById('taskEnd').value = '';
+  document.getElementById('taskColor').value = DEFAULT_TASK_COLOR;
+  document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === DEFAULT_TASK_COLOR));
   document.getElementById('newTaskError').classList.add('hidden');
 
   const note = document.getElementById('newTaskSetupNote');
@@ -4652,6 +4752,7 @@ async function saveNewTask(){
   const endDateVal = document.getElementById('taskEndDate').value || startDateVal;
   const startVal = document.getElementById('taskStart').value;
   const endVal = document.getElementById('taskEnd').value; // opțional
+  const color = document.getElementById('taskColor').value || DEFAULT_TASK_COLOR;
 
   if (!title){ errEl.textContent = 'Introdu un titlu.'; errEl.classList.remove('hidden'); return; }
   if (!startDateVal || !startVal){ errEl.textContent = 'Completează data și ora de început.'; errEl.classList.remove('hidden'); return; }
@@ -4681,13 +4782,19 @@ async function saveNewTask(){
   btn.disabled = true; btn.textContent = 'Se salvează…';
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   try {
-    await createCustomTask({ employeeId: state.employee.id, title, start, end });
-    cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end });
+    await createCustomTask({ employeeId: state.employee.id, title, start, end, color });
+    cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color });
     renderDayFromCache();
+    computeMonthDayColorsFromCache();
+    renderCalendar();
     updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
     document.getElementById('newTaskModal').close();
     // Reconciliem cu rândul real din Supabase (id-ul corect), fără să blocăm UI-ul.
-    forceRefreshCache().then(() => renderDayFromCache());
+    forceRefreshCache().then(() => {
+      renderDayFromCache();
+      computeMonthDayColorsFromCache();
+      renderCalendar();
+    });
   } catch (e){
     updateToast(toastId, 'Eroare la salvare: ' + (e.message || e), 'error', 3200);
   } finally {
