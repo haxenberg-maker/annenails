@@ -185,11 +185,11 @@
      fontului e uniformă (600) în toate stările. */
   .cal-daynum{
     display:flex; align-items:center; justify-content:center;
-    width:26px; height:26px; box-sizing:border-box;
+    width:26px; height:26px; box-sizing:border-box; margin-top:-5px;
     font-variant-numeric:tabular-nums; line-height:1; font-weight:600;
   }
   .dots-container{
-    position:absolute; bottom:4px; left:0; right:0;
+    position:absolute; bottom:2px; left:0; right:0;
     display:flex; flex-wrap:nowrap; gap:3px; align-items:center; justify-content:center;
   }
   .day-dot{ width:4px; height:4px; border-radius:50%; flex:none; }
@@ -268,6 +268,11 @@
     background:var(--danger); color:#fff; border:none; font-size:15px; font-weight:600;
   }
   .btn-danger:hover{ opacity:.9; }
+  /* ---------- Rândul din subsolul #editModal: coș de gunoi (20%) + Salvează (80%) ---------- */
+  .edit-footer-row{ display:flex; gap:8px; }
+  .edit-footer-row button{ width:auto; }
+  .edit-footer-row .btn-icon-only{ flex:0 0 20%; padding:0; display:flex; align-items:center; justify-content:center; }
+  .edit-footer-row #saveEditAppt{ flex:1 1 auto; }
   /* ---------- Selector custom de status (pastile, nu <select> nativ) ---------- */
   .status-pills{ display:flex; flex-wrap:wrap; gap:8px; }
   .status-pill{
@@ -508,6 +513,10 @@
   .slots-wrap{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
 
   /* ---------- Selector vizual de servicii (modalul „Programare nouă”) ---------- */
+  .service-search-input{
+    width:100%; padding:11px 14px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:var(--surface); font-size:14px; margin-bottom:8px;
+  }
   .service-picker{
     display:flex; flex-direction:column; gap:8px; max-height:280px; overflow-y:auto;
     padding:2px; margin-bottom:2px;
@@ -2712,14 +2721,18 @@ function renderClientList(prefix, query, onSelect, opts){
 function showSelectedClient(prefix, client, onChangeClick){
   const selEl = document.getElementById(`${prefix}ClientSelected`);
   const searchWrap = document.getElementById(`${prefix}ClientSearchWrap`);
+  const toggleNewBtn = document.getElementById(`${prefix}ToggleNewClient`);
   if (!selEl || !searchWrap) return;
   if (!client){
     selEl.classList.add('hidden');
     searchWrap.classList.remove('hidden');
+    if (toggleNewBtn) toggleNewBtn.classList.remove('hidden');
     return;
   }
   selEl.classList.remove('hidden');
   searchWrap.classList.add('hidden');
+  // „+ Clientă nouă” are sens doar cât nu e nicio clientă aleasă.
+  if (toggleNewBtn) toggleNewBtn.classList.add('hidden');
   selEl.innerHTML = `
     <span class="client-avatar">${escapeHtml(initials(client.name))}</span>
     <span class="client-row-info">
@@ -4461,6 +4474,7 @@ function ensureModal(){
         <div class="vacation-banner hidden" id="modalVacationWarning"></div>
         <div class="field">
           <label>Serviciu</label>
+          <input type="text" id="serviceSearch" class="service-search-input" placeholder="Caută serviciu..." autocomplete="off" />
           <div class="service-picker" id="servicePicker"></div>
         </div>
         ${clientPickerHtml('add')}
@@ -4508,6 +4522,7 @@ function wireModal(){
     refreshSlots();
     updateSaveEnabled();
   });
+  document.getElementById('serviceSearch').addEventListener('input', () => renderServicePicker());
 
   wireClientPicker('add', {
     get: () => modalState.selectedClient,
@@ -4545,15 +4560,23 @@ function checkModalVacation(){
   return !!vac;
 }
 
-function renderServicePicker(){
-  const wrap = document.getElementById('servicePicker');
+/** Randează cardurile de servicii într-un container dat, filtrate opțional
+ * după un termen de căutare (nume) — folosită atât de #servicePicker
+ * (Programare nouă) cât și de #editServicePicker (Editare programare). */
+function renderServiceCardsInto(wrapId, selectedId, searchTerm){
+  const wrap = document.getElementById(wrapId);
   if (!wrap) return;
   if (state.services.length === 0){
     wrap.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun serviciu configurat încă — adaugă unul din Modele.</p>`;
     return;
   }
-  const selectedId = modalState.selectedService ? modalState.selectedService.id : null;
-  wrap.innerHTML = state.services.map(s => {
+  const term = (searchTerm || '').trim().toLowerCase();
+  const filtered = term ? state.services.filter(s => s.name.toLowerCase().includes(term)) : state.services;
+  if (filtered.length === 0){
+    wrap.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun serviciu găsit pentru „${escapeHtml(searchTerm)}”.</p>`;
+    return;
+  }
+  wrap.innerHTML = filtered.map(s => {
     const thumb = (s.images && s.images.length)
       ? `<img src="${escapeHtml(s.images[0])}" alt="" loading="lazy" />`
       : `<span class="service-card-dot" style="background:${s.color}"></span>`;
@@ -4573,6 +4596,16 @@ function renderServicePicker(){
   }).join('');
 }
 
+function renderServicePicker(){
+  const searchEl = document.getElementById('serviceSearch');
+  renderServiceCardsInto('servicePicker', modalState.selectedService ? modalState.selectedService.id : null, searchEl ? searchEl.value : '');
+}
+
+function renderEditServicePicker(){
+  const searchEl = document.getElementById('editServiceSearch');
+  renderServiceCardsInto('editServicePicker', editState.selectedService ? editState.selectedService.id : null, searchEl ? searchEl.value : '');
+}
+
 async function openAddModal(){
   ensureModal();
   const dlg = document.getElementById('addModal');
@@ -4586,6 +4619,7 @@ async function openAddModal(){
 
   document.getElementById('modalDateLabelText').textContent = fmtDateHeader(modalState.day);
   document.getElementById('modalDate').value = ymd(modalState.day);
+  document.getElementById('serviceSearch').value = '';
   renderServicePicker();
   resetClientPickerUI('add');
   document.getElementById('addNewClientBox').classList.add('hidden');
@@ -4972,8 +5006,9 @@ function ensureEditModal(){
         </div>
         <div class="vacation-banner hidden" id="editVacationWarning"></div>
         <div class="field">
-          <label for="editServiceSelect">Serviciu</label>
-          <select id="editServiceSelect"><option value="">Alege serviciul…</option></select>
+          <label>Serviciu</label>
+          <input type="text" id="editServiceSearch" class="service-search-input" placeholder="Caută serviciu..." autocomplete="off" />
+          <div class="service-picker" id="editServicePicker"></div>
         </div>
         ${clientPickerHtml('edit')}
         <div class="field">
@@ -5006,8 +5041,14 @@ function ensureEditModal(){
       </div>
       <div class="sheet-footer">
         <p class="error-text hidden" id="editModalError"></p>
-        <button type="button" class="btn-danger" id="deleteEditAppt" style="margin-bottom:10px;">Șterge / Anulează programarea</button>
-        <button class="btn-primary" id="saveEditAppt">Salvează modificările</button>
+        <div class="edit-footer-row">
+          <button type="button" class="btn-danger btn-icon-only" id="deleteEditAppt" title="Șterge / Anulează programarea">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+          </button>
+          <button class="btn-primary" id="saveEditAppt">Salvează modificările</button>
+        </div>
       </div>
     </dialog>
   `;
@@ -5032,10 +5073,14 @@ function wireEditModal(){
     enterChangeTimeMode();
     refreshEditSlots();
   });
-  document.getElementById('editServiceSelect').addEventListener('change', e => {
-    editState.selectedService = state.services.find(s => s.id === e.target.value) || null;
+  document.getElementById('editServicePicker').addEventListener('click', (e) => {
+    const card = e.target.closest('.service-card');
+    if (!card) return;
+    editState.selectedService = state.services.find(s => s.id === card.dataset.id) || null;
+    document.querySelectorAll('#editServicePicker .service-card').forEach(c => c.classList.toggle('selected', c === card));
     handleServiceChangeSmart();
   });
+  document.getElementById('editServiceSearch').addEventListener('input', () => renderEditServicePicker());
   document.getElementById('editChangeTimeBtn').addEventListener('click', () => {
     enterChangeTimeMode();
     refreshEditSlots();
@@ -5183,10 +5228,9 @@ async function openEditModal(appt){
     if (state.clients.length === 0) state.clients = await getClients();
   } catch (e){ /* continuăm cu ce avem local */ }
 
-  const sel = document.getElementById('editServiceSelect');
-  sel.innerHTML = `<option value="">Alege serviciul…</option>` +
-    state.services.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.durationMinutes} min, ${s.price} lei)</option>`).join('');
-  sel.value = editState.selectedService ? editState.selectedService.id : '';
+  const sel = document.getElementById('editServiceSearch');
+  sel.value = '';
+  renderEditServicePicker();
 
   resetClientPickerUI('edit');
   if (editState.selectedClient){
