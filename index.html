@@ -342,6 +342,7 @@
   .task-title{ font-weight:600; font-size:14px; color:var(--ink); display:flex; align-items:center; gap:7px; }
   .task-color-dot{ width:9px; height:9px; border-radius:50%; flex:none; }
   .task-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .task-actions{ display:flex; gap:6px; flex:none; }
 
   /* ---------- Panou „Urmează” (14 zile) ---------- */
   .upcoming-item{
@@ -523,24 +524,18 @@
     padding:2px; margin-bottom:2px;
   }
   .service-card{
-    display:flex; align-items:center; gap:12px; width:100%; text-align:left;
-    padding:10px 12px; border-radius:var(--radius-sm); border:1.5px solid var(--border);
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+    padding:7px 10px; border-radius:var(--radius-sm); border:1.5px solid var(--border);
     background:var(--surface);
   }
   .service-card:hover{ border-color:var(--accent); }
   .service-card.selected{ border-color:var(--accent); background:var(--accent-soft); }
-  .service-card-thumb{
-    flex:none; width:40px; height:40px; border-radius:10px; overflow:hidden;
-    display:flex; align-items:center; justify-content:center; background:var(--bg);
-  }
-  .service-card-thumb img{ width:100%; height:100%; object-fit:cover; }
-  .service-card-dot{ width:16px; height:16px; border-radius:50%; flex:none; }
+  .service-card-dot{ width:13px; height:13px; border-radius:50%; flex:none; }
   .service-card-info{ flex:1; min-width:0; }
-  .service-card-name{ font-weight:600; font-size:14.5px; color:var(--ink); display:flex; align-items:center; gap:7px; }
-  .service-card-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
-  .service-card-desc{ font-size:12px; color:var(--ink-soft); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .service-card-name{ font-weight:600; font-size:13.5px; color:var(--ink); }
+  .service-card-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
   .service-card-check{
-    flex:none; width:20px; height:20px; border-radius:50%; border:1.5px solid var(--border);
+    flex:none; width:18px; height:18px; border-radius:50%; border:1.5px solid var(--border);
     display:flex; align-items:center; justify-content:center; color:transparent;
   }
   .service-card.selected .service-card-check{ background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -760,6 +755,19 @@
   .client-gallery-name{ font-weight:600; font-size:13px; margin-top:7px; }
   .client-gallery-tags{ display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:4px; }
 
+  /* ---------- Listă prețuri (printabilă, fără durată) ---------- */
+  .price-list-title{ font-family:var(--font-display); font-size:22px; text-align:center; margin:0 0 18px 0; }
+  .price-list-rows{ display:flex; flex-direction:column; gap:11px; }
+  .price-list-row{ display:flex; align-items:baseline; gap:8px; }
+  .price-list-name{ font-weight:600; font-size:14.5px; white-space:nowrap; }
+  .price-list-dots{ flex:1; border-bottom:1px dotted var(--border); margin-bottom:4px; }
+  .price-list-value{ font-weight:700; font-size:14.5px; color:var(--accent-dark); white-space:nowrap; }
+  @media print{
+    body *{ visibility:hidden; }
+    #priceListContent, #priceListContent *{ visibility:visible; }
+    #priceListContent{ position:absolute; top:0; left:0; width:100%; padding:24px; }
+  }
+
   .hidden{ display:none !important; }
 </style>
 </head>
@@ -886,6 +894,9 @@ const escapeHtml = s => (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&am
 const pad2 = n => String(n).padStart(2,'0');
 const minutesToHHMM = min => `${pad2(Math.floor(min/60))}:${pad2(min%60)}`;
 const hhmmToMinutes = str => { const [h,m] = str.split(':').map(Number); return h*60+m; };
+/** Formatează un obiect Date la "HH:MM" 24h, exact ce așteaptă .value la un
+ * <input type="time"> — spre deosebire de fmtTime (afișare, locale-dependent). */
+const fmtTimeHHMM = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const mondayOf = d => { const wd=(d.getDay()+6)%7; const m=new Date(d.getFullYear(),d.getMonth(),d.getDate()); m.setDate(m.getDate()-wd); return m; };
 
 /* ---------- Mesaj de reamintire (Copiază + WhatsApp) ---------- */
@@ -1303,14 +1314,16 @@ function refreshNotifButtonLabel(){
   }
 }
 
-// Ținem minte care programări au primit deja notificarea, ca să nu o
+// Ținem minte care programări/sarcini au primit deja notificarea, ca să nu o
 // repetăm la fiecare verificare din minutul respectiv.
 const notifiedApptIds = new Set();
+const notifiedTaskIds = new Set();
 
-/** Rulează o dată pe minut: compară ora curentă cu ora programărilor de
- * azi și, când timpul rămas ajunge la intervalul ales (notifLeadTime),
- * arată o notificare nativă a browserului. Funcționează doar cât timp
- * fila aplicației e deschisă (nu e o notificare push prin server). */
+/** Rulează o dată pe minut: compară ora curentă cu ora programărilor și
+ * sarcinilor de azi și, când timpul rămas ajunge la intervalul ales
+ * (notifLeadTime), arată o notificare nativă a browserului. Funcționează
+ * doar cât timp fila aplicației e deschisă (nu e o notificare push prin
+ * server). */
 function checkUpcomingAppointments(){
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (!state.employee) return;
@@ -1328,6 +1341,22 @@ function checkUpcomingAppointments(){
           new Notification('Programare în curând!', {
             body: `${a.clientName || 'Clientă'} — ${a.serviceName || 'programare'} la ${fmtTime(a.startTime)}`,
             tag: `appt-${a.id}`,
+          });
+        } catch (e){ /* unele browsere mobile refuză Notification API în fundal — ignorăm */ }
+      }
+    });
+  // Sarcini / alte activități (custom_tasks) — aceeași logică, comparăm cu
+  // ora de ÎNCEPUT a sarcinii dacă începe azi.
+  cache.customTasks
+    .filter(t => t.employeeId === state.employee.id && isSameDay(t.start, now))
+    .forEach(t => {
+      const diffMin = Math.round((t.start.getTime() - now.getTime()) / 60000);
+      if (diffMin <= leadMin && diffMin >= leadMin - 1 && !notifiedTaskIds.has(t.id)){
+        notifiedTaskIds.add(t.id);
+        try {
+          new Notification('Sarcină în curând!', {
+            body: `${t.title || 'Sarcină'} la ${fmtTime(t.start)}`,
+            tag: `task-${t.id}`,
           });
         } catch (e){ /* unele browsere mobile refuză Notification API în fundal — ignorăm */ }
       }
@@ -1608,6 +1637,13 @@ async function createCustomTask({ employeeId, title, start, end, color }){
     employee_id: employeeId, title, start_time: start.toISOString(), end_time: end.toISOString(),
     color: color || DEFAULT_TASK_COLOR,
   });
+  if (error) throw error;
+}
+
+async function updateCustomTask(id, { title, start, end, color }){
+  const { error } = await sb.from('custom_tasks').update({
+    title, start_time: start.toISOString(), end_time: end.toISOString(), color: color || DEFAULT_TASK_COLOR,
+  }).eq('id', id);
   if (error) throw error;
 }
 
@@ -2517,9 +2553,14 @@ function renderAppointmentList(vac){
             <div class="task-title"><span class="task-color-dot" style="background:${taskColor}"></span>${escapeHtml(t.title)}</div>
             <div class="task-sub">${isMultiDay ? `Sarcină pe mai multe zile (${fmtDateShort(t.start)} – ${fmtDateShort(t.end)})` : 'Sarcină / altă activitate'}</div>
           </div>
-          <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <div class="task-actions">
+            <button class="reminder-btn task-edit-btn" data-task-edit-id="${t.id}" title="Editează sarcina">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
         </div>
       `;
     }
@@ -2586,6 +2627,14 @@ function renderAppointmentList(vac){
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       deleteCustomTaskOptimistic(btn.dataset.taskId);
+    });
+  });
+
+  content.querySelectorAll('.task-edit-btn[data-task-edit-id]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const task = cache.customTasks.find(t => t.id === btn.dataset.taskEditId);
+      if (task) openNewTaskModal(task);
     });
   });
 
@@ -3129,7 +3178,10 @@ async function renderModelsScreen(){
         <section class="panel settings-section">
           <h2>Servicii</h2>
           <p class="settings-hint">Serviciile disponibile și culoarea lor pe calendar. Adaugă unul nou mai jos.</p>
-          <button type="button" class="btn-outline" id="showClientGalleryBtn" style="margin-bottom:14px;">📷 Arată Galerie Clientă</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+            <button type="button" class="btn-outline" id="showClientGalleryBtn">📷 Arată Galerie Clientă</button>
+            <button type="button" class="btn-outline" id="showPriceListBtn">📄 Generează Listă prețuri</button>
+          </div>
           <div class="tag-pills" id="tagPillsWrap"></div>
           <div id="servicesSetupNote"></div>
           <div id="servicesList"></div>
@@ -3183,6 +3235,7 @@ async function renderModelsScreen(){
   document.getElementById('backBtn').addEventListener('click', goCalendar);
   document.getElementById('saveSvcBtn').addEventListener('click', saveNewService);
   document.getElementById('showClientGalleryBtn').addEventListener('click', openClientGalleryModal);
+  document.getElementById('showPriceListBtn').addEventListener('click', openPriceListModal);
   document.querySelectorAll('#presetSwatches .preset-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
       document.getElementById('svcColor').value = sw.dataset.color;
@@ -4183,6 +4236,57 @@ function openClientGalleryModal(){
   document.getElementById('clientGalleryModal').showModal();
 }
 
+/* ---------- Listă prețuri (generată din Servicii, doar nume + preț, fără durată) ---------- */
+function ensurePriceListModal(){
+  if (document.getElementById('priceListModal')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="priceListModal">
+      <div class="sheet-header">
+        <div class="sheet-title">Listă prețuri</div>
+        <button type="button" class="icon-btn" id="closePriceListModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <div id="priceListContent"></div>
+        <button type="button" class="btn-primary" id="printPriceListBtn" style="margin-top:16px;">🖨️ Printează / Salvează PDF</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('priceListModal'));
+  document.getElementById('closePriceListModal').addEventListener('click', () => document.getElementById('priceListModal').close());
+  document.getElementById('printPriceListBtn').addEventListener('click', () => window.print());
+}
+
+function renderPriceListContent(){
+  const wrap = document.getElementById('priceListContent');
+  if (!wrap) return;
+  if (state.services.length === 0){
+    wrap.innerHTML = `<p class="settings-hint">Niciun serviciu activ.</p>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <h2 class="price-list-title">Lista prețuri</h2>
+    <div class="price-list-rows">
+      ${state.services.map(s => `
+        <div class="price-list-row">
+          <span class="price-list-name">${escapeHtml(s.name)}</span>
+          <span class="price-list-dots"></span>
+          <span class="price-list-value">${Number(s.price).toLocaleString('ro-RO')} lei</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function openPriceListModal(){
+  ensurePriceListModal();
+  renderPriceListContent();
+  document.getElementById('priceListModal').showModal();
+}
+
 function renderClientGalleryTagPills(){
   const wrap = document.getElementById('clientGalleryTagPills');
   const tags = ['Toate', ...allServiceTags()];
@@ -4509,12 +4613,12 @@ function ensureModal(){
           </div>
         </div>
         <div class="vacation-banner hidden" id="modalVacationWarning"></div>
+        ${clientPickerHtml('add')}
         <div class="field">
           <label>Serviciu</label>
           <input type="text" id="serviceSearch" class="service-search-input" placeholder="Caută serviciu..." autocomplete="off" />
           <div class="service-picker" id="servicePicker"></div>
         </div>
-        ${clientPickerHtml('add')}
         <div id="slotsArea" class="slots-area">
           <div id="slotsSection" class="hidden">
             <div class="slots-label">Alege ora</div>
@@ -4613,24 +4717,20 @@ function renderServiceCardsInto(wrapId, selectedId, searchTerm){
     wrap.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun serviciu găsit pentru „${escapeHtml(searchTerm)}”.</p>`;
     return;
   }
-  wrap.innerHTML = filtered.map(s => {
-    const thumb = (s.images && s.images.length)
-      ? `<img src="${escapeHtml(s.images[0])}" alt="" loading="lazy" />`
-      : `<span class="service-card-dot" style="background:${s.color}"></span>`;
-    return `
-      <button type="button" class="service-card ${s.id === selectedId ? 'selected' : ''}" data-id="${s.id}">
-        <span class="service-card-thumb">${thumb}</span>
-        <span class="service-card-info">
-          <span class="service-card-name"><span class="service-card-dot" style="width:9px;height:9px;background:${s.color}"></span>${escapeHtml(s.name)}</span>
-          <span class="service-card-meta">${s.durationMinutes} min · ${s.price} lei</span>
-          ${s.description ? `<span class="service-card-desc">${escapeHtml(s.description)}</span>` : ''}
-        </span>
-        <span class="service-card-check">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-        </span>
-      </button>
-    `;
-  }).join('');
+  // Card compact, fără poze — doar bulina de culoare, numele, durata și
+  // prețul, ca să ocupe cât mai puțin spațiu vertical pe mobil.
+  wrap.innerHTML = filtered.map(s => `
+    <button type="button" class="service-card ${s.id === selectedId ? 'selected' : ''}" data-id="${s.id}">
+      <span class="service-card-dot" style="background:${s.color}"></span>
+      <span class="service-card-info">
+        <span class="service-card-name">${escapeHtml(s.name)}</span>
+        <span class="service-card-meta">${s.durationMinutes} min · ${s.price} lei</span>
+      </span>
+      <span class="service-card-check">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+      </span>
+    </button>
+  `).join('');
 }
 
 function renderServicePicker(){
@@ -4755,7 +4855,7 @@ function ensureNewTaskModal(){
   wrap.innerHTML = `
     <dialog id="newTaskModal">
       <div class="sheet-header">
-        <div class="sheet-title">Sarcină nouă / Altă activitate</div>
+        <div class="sheet-title" id="newTaskModalTitle">Sarcină nouă / Altă activitate</div>
         <button class="icon-btn" id="closeNewTaskModal">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -4805,18 +4905,34 @@ function ensureNewTaskModal(){
   });
 }
 
-async function openNewTaskModal(){
+const taskModalState = { editingId: null };
+
+async function openNewTaskModal(task){
   ensureNewTaskModal();
   const dlg = document.getElementById('newTaskModal');
   if (dlg.open) return;
 
-  document.getElementById('taskTitle').value = '';
-  document.getElementById('taskStartDate').value = ymd(state.selectedDay);
-  document.getElementById('taskEndDate').value = '';
-  document.getElementById('taskStart').value = '';
-  document.getElementById('taskEnd').value = '';
-  document.getElementById('taskColor').value = DEFAULT_TASK_COLOR;
-  document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === DEFAULT_TASK_COLOR));
+  taskModalState.editingId = task ? task.id : null;
+  document.getElementById('newTaskModalTitle').textContent = task ? 'Editează sarcina' : 'Sarcină nouă / Altă activitate';
+  document.getElementById('saveNewTaskBtn').textContent = task ? 'Salvează modificările' : 'Salvează sarcina';
+
+  if (task){
+    document.getElementById('taskTitle').value = task.title || '';
+    document.getElementById('taskStartDate').value = ymd(task.start);
+    document.getElementById('taskEndDate').value = ymd(task.start) === ymd(task.end) ? '' : ymd(task.end);
+    document.getElementById('taskStart').value = fmtTimeHHMM(task.start);
+    document.getElementById('taskEnd').value = fmtTimeHHMM(task.end);
+    document.getElementById('taskColor').value = task.color || DEFAULT_TASK_COLOR;
+    document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === (task.color || DEFAULT_TASK_COLOR)));
+  } else {
+    document.getElementById('taskTitle').value = '';
+    document.getElementById('taskStartDate').value = ymd(state.selectedDay);
+    document.getElementById('taskEndDate').value = '';
+    document.getElementById('taskStart').value = '';
+    document.getElementById('taskEnd').value = '';
+    document.getElementById('taskColor').value = DEFAULT_TASK_COLOR;
+    document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === DEFAULT_TASK_COLOR));
+  }
   document.getElementById('newTaskError').classList.add('hidden');
 
   const note = document.getElementById('newTaskSetupNote');
@@ -4879,16 +4995,25 @@ async function saveNewTask(){
   if (end <= start){ errEl.textContent = 'Ora de sfârșit trebuie să fie după cea de început.'; errEl.classList.remove('hidden'); return; }
 
   const btn = document.getElementById('saveNewTaskBtn');
+  const editingId = taskModalState.editingId;
   btn.disabled = true; btn.textContent = 'Se salvează…';
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   try {
-    await createCustomTask({ employeeId: state.employee.id, title, start, end, color });
-    cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color });
+    if (editingId){
+      await updateCustomTask(editingId, { title, start, end, color });
+      const idx = cache.customTasks.findIndex(t => t.id === editingId);
+      if (idx >= 0) cache.customTasks[idx] = { ...cache.customTasks[idx], title, start, end, color };
+      updateToast(toastId, 'Sarcină actualizată.', 'success', 1800);
+    } else {
+      await createCustomTask({ employeeId: state.employee.id, title, start, end, color });
+      cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color });
+      updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
+    }
     renderDayFromCache();
     computeMonthDayColorsFromCache();
     renderCalendar();
-    updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
     document.getElementById('newTaskModal').close();
+    taskModalState.editingId = null;
     // Reconciliem cu rândul real din Supabase (id-ul corect), fără să blocăm UI-ul.
     forceRefreshCache().then(() => {
       renderDayFromCache();
@@ -4898,7 +5023,7 @@ async function saveNewTask(){
   } catch (e){
     updateToast(toastId, 'Eroare la salvare: ' + (e.message || e), 'error', 3200);
   } finally {
-    btn.disabled = false; btn.textContent = 'Salvează sarcina';
+    btn.disabled = false; btn.textContent = editingId ? 'Salvează modificările' : 'Salvează sarcina';
   }
 }
 
@@ -5042,12 +5167,12 @@ function ensureEditModal(){
           </div>
         </div>
         <div class="vacation-banner hidden" id="editVacationWarning"></div>
+        ${clientPickerHtml('edit')}
         <div class="field">
           <label>Serviciu</label>
           <input type="text" id="editServiceSearch" class="service-search-input" placeholder="Caută serviciu..." autocomplete="off" />
           <div class="service-picker" id="editServicePicker"></div>
         </div>
-        ${clientPickerHtml('edit')}
         <div class="field">
           <label>Ora programării</label>
           <div class="current-slot-box" id="editCurrentSlotBox">
