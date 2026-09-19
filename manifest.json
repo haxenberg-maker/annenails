@@ -1,20 +1,25 @@
 {
-  "name": "Programări Unghii",
-  "short_name": "Programări",
-  "start_url": "index.html",
+  "name": "Agenda programari",
+  "short_name": "Agenda",
+  "description": "Agenda",
+  "start_url": "https://deploy-preview-1--annenails.netlify.app/#/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#FFF5F5",
-  "theme_color": "#8A1C41",
+  "orientation": "portrait",
+  "background_color": "#FCF0F5",
+  "theme_color": "#D6336C",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "data:[omitted-by-pwabuilder]",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "data:[omitted-by-pwabuilder]",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
