@@ -352,8 +352,9 @@
   .upcoming-label{ font-size:14px; color:var(--ink); }
 
   /* ---------- Finalizare programări trecute (sumă încasată) ---------- */
-  .finalize-row{ display:flex; gap:8px; align-items:center; margin-top:8px; }
-  .finalize-row input[type="number"]{ flex:1; }
+  .finalize-row{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .finalize-row input[type="number"]{ flex:1; min-width:70px; }
+  .finalize-row button{ flex:none; }
 
   /* ---------- Selector ture predefinite (celălalt job) ---------- */
   .wk-shift-select{ width:100%; margin-bottom:6px; }
@@ -631,6 +632,17 @@
   .wd-sep{ color:var(--ink-soft); font-size:12px; flex:none; }
   .wd-off{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); flex:none; }
   .wd-off input{ width:15px; height:15px; flex:none; }
+  .task-overlap-label{ display:flex; align-items:center; gap:7px; font-size:13.5px; color:var(--ink); font-weight:600; cursor:pointer; }
+  .task-overlap-label input{ width:17px; height:17px; flex:none; }
+  /* ---------- Durată reală medie per serviciu ---------- */
+  .duration-stats-list{ display:flex; flex-direction:column; gap:10px; }
+  .duration-stats-row{ padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg); }
+  .duration-stats-name{ font-weight:600; font-size:14px; }
+  .duration-stats-meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .duration-diff{ font-weight:600; margin-left:4px; }
+  .duration-diff-over{ color:var(--danger); }
+  .duration-diff-under{ color:var(--success); }
+  .duration-diff-neutral{ color:var(--ink-soft); }
   @media (max-width:380px){
     .wd-row{ flex-direction:column; align-items:flex-start; }
     .wd-times{ width:100%; justify-content:flex-start; }
@@ -883,6 +895,14 @@ const PAID_AMOUNT_SETUP_SQL =
 `alter table public.appointments
   add column if not exists paid_amount numeric;`;
 
+const ACTUAL_DURATION_SETUP_SQL =
+`alter table public.appointments
+  add column if not exists actual_duration_minutes integer;`;
+
+const TASK_OVERLAP_SETUP_SQL =
+`alter table public.custom_tasks
+  add column if not exists allow_overlap boolean not null default false;`;
+
 const CUSTOM_TASKS_SETUP_SQL =
 `create table if not exists public.custom_tasks (
   id uuid primary key default gen_random_uuid(),
@@ -1073,6 +1093,8 @@ const state = {
   serviceMediaColumnsOk: false,
   serviceGalleryColumnsOk: false,
   paidAmountColumnOk: false,
+  actualDurationColumnOk: false,
+  taskOverlapColumnOk: false,
   customTasksTableOk: false,
   vacationsMissingTable: false,
   pendingAppointments: [],
@@ -1561,6 +1583,45 @@ async function paidAmountColumnExists(){
   return true;
 }
 
+async function actualDurationColumnExists(){
+  const { error } = await sb.from('appointments').select('actual_duration_minutes').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+/** Durata reală medie per serviciu, calculată din duratele introduse la
+ * finalizarea programărilor (actual_duration_minutes) — arată cât durează
+ * de fapt fiecare serviciu, nu doar durata estimată setată pe serviciu. */
+async function getAverageDurationsByService(employeeId){
+  const { data, error } = await sb.from('appointments')
+    .select('service_id, actual_duration_minutes, services(name)')
+    .eq('employee_id', employeeId)
+    .eq('status', 'completed')
+    .not('actual_duration_minutes', 'is', null);
+  if (error){
+    if (error.code === '42703' || (error.message || '').toLowerCase().includes('actual_duration_minutes')) return { missingColumn: true, rows: [] };
+    throw error;
+  }
+  const groups = new Map();
+  data.forEach(r => {
+    if (!r.service_id || r.actual_duration_minutes == null) return;
+    const g = groups.get(r.service_id) || { name: r.services ? r.services.name : 'Serviciu șters', total: 0, count: 0 };
+    g.total += Number(r.actual_duration_minutes) || 0;
+    g.count += 1;
+    groups.set(r.service_id, g);
+  });
+  const rows = Array.from(groups.entries()).map(([serviceId, g]) => ({
+    serviceId, name: g.name, avgMinutes: Math.round(g.total / g.count), count: g.count,
+  })).sort((a, b) => b.count - a.count);
+  return { missingColumn: false, rows };
+}
+
+async function taskOverlapColumnExists(){
+  const { error } = await sb.from('custom_tasks').select('allow_overlap').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
 async function customTasksTableExists(){
   const { error } = await sb.from('custom_tasks').select('id').limit(1);
   if (error && (error.code === '42P01' || (error.message || '').toLowerCase().includes('does not exist'))) return false;
@@ -1688,18 +1749,22 @@ async function getCustomTasks({ employeeId, from, to }){
   return data;
 }
 
-async function createCustomTask({ employeeId, title, start, end, color }){
-  const { error } = await sb.from('custom_tasks').insert({
+async function createCustomTask({ employeeId, title, start, end, color, allowOverlap }){
+  const payload = {
     employee_id: employeeId, title, start_time: start.toISOString(), end_time: end.toISOString(),
     color: color || DEFAULT_TASK_COLOR,
-  });
+  };
+  if (state.taskOverlapColumnOk) payload.allow_overlap = !!allowOverlap;
+  const { error } = await sb.from('custom_tasks').insert(payload);
   if (error) throw error;
 }
 
-async function updateCustomTask(id, { title, start, end, color }){
-  const { error } = await sb.from('custom_tasks').update({
+async function updateCustomTask(id, { title, start, end, color, allowOverlap }){
+  const payload = {
     title, start_time: start.toISOString(), end_time: end.toISOString(), color: color || DEFAULT_TASK_COLOR,
-  }).eq('id', id);
+  };
+  if (state.taskOverlapColumnOk) payload.allow_overlap = !!allowOverlap;
+  const { error } = await sb.from('custom_tasks').update(payload).eq('id', id);
   if (error) throw error;
 }
 
@@ -1947,7 +2012,7 @@ async function loadApptsAndBlocksRange(from, to){
   }));
   const tasks = tasksRaw.map(t => ({
     id: t.id, employeeId: t.employee_id, start: new Date(t.start_time), end: new Date(t.end_time), title: t.title,
-    color: t.color || DEFAULT_TASK_COLOR,
+    color: t.color || DEFAULT_TASK_COLOR, allowOverlap: !!t.allow_overlap,
   }));
   return { appts, blocks, tasks };
 }
@@ -1962,13 +2027,14 @@ async function bulkLoadCache(){
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const to = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999);
-  const [{ appts, blocks, tasks }, vacRes, clients, services, reminderIds, clientApptCounts] = await Promise.all([
+  const [{ appts, blocks, tasks }, vacRes, clients, services, reminderIds, clientApptCounts, taskOverlapOk] = await Promise.all([
     loadApptsAndBlocksRange(from, to),
     getVacations(state.employee.id),
     getClients(),
     getServices(),
     getActiveReminderApptIds(state.employee.id),
     getClientAppointmentCounts(state.employee.id).catch(() => new Map()),
+    taskOverlapColumnExists().catch(() => false),
   ]);
   cache.appointments = appts;
   cache.jobBlocks = blocks;
@@ -1977,6 +2043,7 @@ async function bulkLoadCache(){
   cache.reminderApptIds = reminderIds;
   cache.clientApptCounts = clientApptCounts;
   state.vacationsMissingTable = vacRes.missingTable;
+  state.taskOverlapColumnOk = taskOverlapOk;
   cache.rangeFrom = from;
   cache.rangeTo = to;
   state.clients = clients;
@@ -2024,6 +2091,10 @@ function mergePendingIntoCache(){
 function findConflictInCache({ employeeId, day, start, end, excludeApptId }){
   const blocks = cache.jobBlocks.filter(b => b.employeeId === employeeId && isSameDay(b.start, day));
   for (const b of blocks){ if (start < b.end && end > b.start) return { start: b.start, end: b.end, type: 'block' }; }
+  // Sarcinile blochează implicit, la fel ca un job — EXCEPTÂND cele cu
+  // „Permite suprapunere” bifat, care rămân pur informative.
+  const tasks = cache.customTasks.filter(t => t.employeeId === employeeId && !t.allowOverlap && isSameDay(t.start, day));
+  for (const t of tasks){ if (start < t.end && end > t.start) return { start: t.start, end: t.end, type: 'task', title: t.title }; }
   const appts = cache.appointments.filter(a => a.employeeId === employeeId && a.status !== 'cancelled' && a.id !== excludeApptId && isSameDay(a.startTime, day));
   for (const a of appts){ if (start < a.endTime && end > a.startTime) return { start: a.startTime, end: a.endTime, type: 'appt', clientName: a.clientName }; }
   const { startMin, endMin } = dayHoursFor(day);
@@ -2054,6 +2125,7 @@ async function getFreeSlots({ employeeId, day, serviceDurationMinutes, slotStepM
 
   const busy = [
     ...cache.jobBlocks.filter(b => b.employeeId === employeeId && isSameDay(b.start, day)).map(b => ({ start: b.start, end: b.end })),
+    ...cache.customTasks.filter(t => t.employeeId === employeeId && !t.allowOverlap && isSameDay(t.start, day)).map(t => ({ start: t.start, end: t.end })),
     ...cache.appointments.filter(a => a.employeeId === employeeId && a.status !== 'cancelled' && a.id !== excludeApptId && isSameDay(a.startTime, day)).map(a => ({ start: a.startTime, end: a.endTime })),
   ].sort((a, b) => a.start - b.start);
 
@@ -3777,7 +3849,7 @@ async function loadUnconfirmedList(){
     const pastHtml = pastUnresolved.length ? `
       <h3 class="unconf-section-title">De încheiat (programări trecute)</h3>
       ${pastUnresolved.map(a => `
-        <div class="unconf-card past-unresolved-card" data-id="${a.id}" data-price="${a.servicePrice || 0}">
+        <div class="unconf-card past-unresolved-card" data-id="${a.id}" data-price="${a.servicePrice || 0}" data-service-id="${a.serviceId || ''}">
           <div class="unconf-top">
             <div class="unconf-client">Ai finalizat programarea cu ${escapeHtml(a.clientName || 'Client')} (${escapeHtml(a.serviceName || '')})?</div>
             <div class="unconf-meta">${fmtDateHeader(a.startTime)}, ${fmtTime(a.startTime)} - ${fmtTime(a.endTime)}</div>
@@ -3787,7 +3859,8 @@ async function loadUnconfirmedList(){
             <button type="button" class="btn-decline" data-action="cancelled">Anulată</button>
           </div>
           <div class="finalize-row hidden" data-role="finalize-row">
-            <input type="number" min="0" step="0.01" data-role="paid-amount" value="${a.servicePrice || 0}" />
+            <input type="number" min="0" step="0.01" data-role="paid-amount" placeholder="Lei" value="${a.servicePrice || 0}" />
+            <input type="number" min="1" step="1" data-role="actual-duration" placeholder="Minute" value="${Math.max(1, Math.round((a.endTime - a.startTime) / 60000))}" />
             <button type="button" class="btn-primary" data-role="confirm-amount">Salvează</button>
           </div>
         </div>
@@ -3814,7 +3887,8 @@ async function loadUnconfirmedList(){
       });
       finalizeRow.querySelector('[data-role="confirm-amount"]').addEventListener('click', () => {
         const amount = parseFloat(finalizeRow.querySelector('[data-role="paid-amount"]').value);
-        handlePastUnresolvedFinalize(id, isNaN(amount) ? 0 : amount, card);
+        const durationVal = parseInt(finalizeRow.querySelector('[data-role="actual-duration"]').value, 10);
+        handlePastUnresolvedFinalize(id, isNaN(amount) ? 0 : amount, card, isNaN(durationVal) ? null : durationVal, card.dataset.serviceId);
       });
     });
 
@@ -5092,6 +5166,14 @@ function ensureNewTaskModal(){
           </div>
           <input type="hidden" id="taskColor" value="${DEFAULT_TASK_COLOR}" />
         </div>
+        <div class="field">
+          <label class="task-overlap-label">
+            <input type="checkbox" id="taskAllowOverlap" />
+            Permite suprapunere cu programări
+          </label>
+          <p class="settings-hint" style="margin:2px 0 0 0;">Bifată: chiar dacă ai această sarcină, tot poți programa o clientă în același interval.</p>
+          <div class="hidden" id="taskOverlapSetupNote" style="margin-top:4px;"></div>
+        </div>
         <p class="error-text hidden" id="newTaskError"></p>
         <button class="btn-primary" id="saveNewTaskBtn" style="margin-top:14px;">Salvează sarcina</button>
       </div>
@@ -5129,6 +5211,7 @@ async function openNewTaskModal(task){
     document.getElementById('taskEnd').value = fmtTimeHHMM(task.end);
     document.getElementById('taskColor').value = task.color || DEFAULT_TASK_COLOR;
     document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === (task.color || DEFAULT_TASK_COLOR)));
+    document.getElementById('taskAllowOverlap').checked = !!task.allowOverlap;
   } else {
     document.getElementById('taskTitle').value = '';
     document.getElementById('taskStartDate').value = ymd(state.selectedDay);
@@ -5137,8 +5220,32 @@ async function openNewTaskModal(task){
     document.getElementById('taskEnd').value = '';
     document.getElementById('taskColor').value = DEFAULT_TASK_COLOR;
     document.querySelectorAll('#taskColorSwatches .preset-swatch').forEach(s => s.classList.toggle('active', s.dataset.color === DEFAULT_TASK_COLOR));
+    document.getElementById('taskAllowOverlap').checked = false;
   }
   document.getElementById('newTaskError').classList.add('hidden');
+
+  const overlapOk = await taskOverlapColumnExists().catch(() => false);
+  state.taskOverlapColumnOk = overlapOk;
+  const overlapCheckbox = document.getElementById('taskAllowOverlap');
+  const overlapNote = document.getElementById('taskOverlapSetupNote');
+  overlapCheckbox.disabled = !overlapOk;
+  if (!overlapOk){
+    overlapNote.classList.remove('hidden');
+    overlapNote.innerHTML = `
+      <div class="setup-note">
+        Necesită o coloană nouă în Supabase. Rulează o singură dată acest SQL în <strong>Supabase → SQL Editor</strong>, apoi revino aici.
+        <pre>${escapeHtml(TASK_OVERLAP_SETUP_SQL)}</pre>
+        <button class="btn-outline" id="copyTaskOverlapSqlBtn" type="button">Copiază SQL</button>
+      </div>
+    `;
+    document.getElementById('copyTaskOverlapSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(TASK_OVERLAP_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
+    });
+  } else {
+    overlapNote.classList.add('hidden');
+    overlapNote.innerHTML = '';
+  }
 
   const note = document.getElementById('newTaskSetupNote');
   const saveBtn = document.getElementById('saveNewTaskBtn');
@@ -5174,6 +5281,7 @@ async function saveNewTask(){
   const startVal = document.getElementById('taskStart').value;
   const endVal = document.getElementById('taskEnd').value; // opțional
   const color = document.getElementById('taskColor').value || DEFAULT_TASK_COLOR;
+  const allowOverlap = document.getElementById('taskAllowOverlap').checked;
 
   if (!title){ errEl.textContent = 'Introdu un titlu.'; errEl.classList.remove('hidden'); return; }
   if (!startDateVal || !startVal){ errEl.textContent = 'Completează data și ora de început.'; errEl.classList.remove('hidden'); return; }
@@ -5205,13 +5313,13 @@ async function saveNewTask(){
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   try {
     if (editingId){
-      await updateCustomTask(editingId, { title, start, end, color });
+      await updateCustomTask(editingId, { title, start, end, color, allowOverlap });
       const idx = cache.customTasks.findIndex(t => t.id === editingId);
-      if (idx >= 0) cache.customTasks[idx] = { ...cache.customTasks[idx], title, start, end, color };
+      if (idx >= 0) cache.customTasks[idx] = { ...cache.customTasks[idx], title, start, end, color, allowOverlap };
       updateToast(toastId, 'Sarcină actualizată.', 'success', 1800);
     } else {
-      await createCustomTask({ employeeId: state.employee.id, title, start, end, color });
-      cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color });
+      await createCustomTask({ employeeId: state.employee.id, title, start, end, color, allowOverlap });
+      cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color, allowOverlap });
       updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
     }
     renderDayFromCache();
@@ -5546,6 +5654,7 @@ function handleServiceChangeSmart(){
       const conflictLabel = conflict.type === 'appt'
         ? `altă programare${conflict.clientName ? ' (' + escapeHtml(conflict.clientName) + ')' : ''} de la ${fmtTime(conflict.start)}`
         : conflict.type === 'block' ? `celălalt job de la ${fmtTime(conflict.start)}`
+        : conflict.type === 'task' ? `sarcina „${escapeHtml(conflict.title || '')}” de la ${fmtTime(conflict.start)}`
         : `programul de lucru din această zi`;
       msgEl.innerHTML = `⚠ Atenție: Noul serviciu se suprapune cu ${conflictLabel}! Alege o oră nouă.`;
     }
