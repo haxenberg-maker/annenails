@@ -3103,6 +3103,13 @@ async function renderSettingsScreen(){
         </section>
 
         <section class="panel settings-section">
+          <h2>⏱️ Durată reală medie per serviciu</h2>
+          <p class="settings-hint">Calculată din duratele introduse la finalizarea programărilor — te ajută să vezi cât durează de fapt fiecare serviciu.</p>
+          <div id="durationStatsSetupNote"></div>
+          <div id="durationStatsBody"><div class="spinner"></div></div>
+        </section>
+
+        <section class="panel settings-section">
           <h2>Programul de la celălalt job</h2>
           <p class="settings-hint">Orele în care lucrezi în altă parte, în săptămâna aleasă — restul timpului (în intervalul de mai jos) rămâne disponibil pentru programări la unghii.</p>
           <div class="week-nav">
@@ -3252,7 +3259,57 @@ async function renderSettingsScreen(){
   await loadWeekRows();
   state.paidAmountColumnOk = await paidAmountColumnExists();
   await loadStats();
+  await loadDurationStatsSection();
   await loadVacationsSection();
+}
+
+/* ---------- Durată reală medie per serviciu ---------- */
+async function loadDurationStatsSection(){
+  const note = document.getElementById('durationStatsSetupNote');
+  const body = document.getElementById('durationStatsBody');
+  if (!state.employee || !note || !body) return;
+  body.innerHTML = `<div class="spinner"></div>`;
+  try {
+    const { missingColumn, rows } = await getAverageDurationsByService(state.employee.id);
+    if (missingColumn){
+      note.innerHTML = `
+        <div class="setup-note">
+          Coloana <code>actual_duration_minutes</code> nu există încă pe <code>appointments</code>. Rulează o singură dată acest SQL în
+          <strong>Supabase → SQL Editor</strong>, apoi introdu durata reală la finalizarea următoarelor programări.
+          <pre>${escapeHtml(ACTUAL_DURATION_SETUP_SQL)}</pre>
+          <button class="btn-outline" id="copyDurationSqlBtn" type="button">Copiază SQL</button>
+        </div>`;
+      body.innerHTML = '';
+      document.getElementById('copyDurationSqlBtn').addEventListener('click', async (e) => {
+        try { await navigator.clipboard.writeText(ACTUAL_DURATION_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+        catch (err){ showToast('Nu am putut copia automat — selectează manual textul de mai sus.', 'error', { autoHide: 3200 }); }
+      });
+      return;
+    }
+    note.innerHTML = '';
+    if (rows.length === 0){
+      body.innerHTML = `<p class="settings-hint" style="margin:0;">Încă nicio durată reală înregistrată — apare aici după ce completezi durata la finalizarea unei programări.</p>`;
+      return;
+    }
+    body.innerHTML = `<div class="duration-stats-list">${rows.map(r => {
+      const svc = state.services.find(s => s.id === r.serviceId);
+      const estMin = svc ? svc.durationMinutes : null;
+      const diff = estMin != null ? r.avgMinutes - estMin : null;
+      const diffHtml = diff != null
+        ? (diff === 0 ? `<span class="duration-diff duration-diff-neutral">= estimat</span>`
+          : diff > 0 ? `<span class="duration-diff duration-diff-over">+${diff} min față de estimat</span>`
+          : `<span class="duration-diff duration-diff-under">${diff} min față de estimat</span>`)
+        : '';
+      return `
+        <div class="duration-stats-row">
+          <div class="duration-stats-name">${escapeHtml(r.name)}</div>
+          <div class="duration-stats-meta">${r.avgMinutes} min în medie · ${r.count} programări${diffHtml}</div>
+        </div>
+      `;
+    }).join('')}</div>`;
+  } catch (e){
+    body.innerHTML = `<p class="error-text">Eroare: ${escapeHtml(e.message || e)}</p>`;
+  }
 }
 
 /* ---------- Jurnal de activitate ---------- */
@@ -3938,13 +3995,30 @@ async function handlePastUnresolvedCancel(id, cardEl){
   }
 }
 
-async function handlePastUnresolvedFinalize(id, amount, cardEl){
+async function handlePastUnresolvedFinalize(id, amount, cardEl, actualDurationMinutes, serviceId){
   const buttons = cardEl.querySelectorAll('button, input');
   buttons.forEach(b => b.disabled = true);
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   const idx = cache.appointments.findIndex(a => a.id === id);
+  const payload = { status: 'completed', paid_amount: amount };
+  const wantsDuration = actualDurationMinutes != null && actualDurationMinutes > 0;
+  if (wantsDuration) payload.actual_duration_minutes = actualDurationMinutes;
   try {
-    await updateAppointmentRow(id, { status: 'completed', paid_amount: amount });
+    try {
+      await updateAppointmentRow(id, payload);
+    } catch (e){
+      // Coloana pentru durata reală e opțională — dacă lipsește încă din
+      // Supabase, reîncercăm FĂRĂ ea, ca finalizarea (status + suma
+      // încasată) să nu pice din cauza unui câmp secundar.
+      const missingDurationColumn = wantsDuration && e && (e.code === '42703' || (e.message || '').toLowerCase().includes('actual_duration_minutes'));
+      if (missingDurationColumn){
+        delete payload.actual_duration_minutes;
+        await updateAppointmentRow(id, payload);
+        showToast('Durata n-a fost salvată (coloana actual_duration_minutes lipsește încă din Supabase — SQL-ul e în Setări → Statistici), dar suma și statusul s-au salvat.', 'warning', { autoHide: 5600 });
+      } else {
+        throw e;
+      }
+    }
     if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'completed', paidAmount: amount };
     cardEl.remove();
     updateToast(toastId, 'Programare finalizată — venit înregistrat.', 'success', 2200);
@@ -3969,6 +4043,7 @@ function refreshAfterPastResolution(){
   computeMonthDayColorsFromCache();
   renderCalendar();
   if (document.getElementById('statsBody')) loadStats();
+  if (document.getElementById('durationStatsBody')) loadDurationStatsSection();
 }
 
 /* ====================== MODAL: URMEAZA (14 ZILE) ====================== */
