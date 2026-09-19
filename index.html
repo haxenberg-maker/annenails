@@ -913,6 +913,10 @@ const TASK_OVERLAP_SETUP_SQL =
 `alter table public.custom_tasks
   add column if not exists allow_overlap boolean not null default false;`;
 
+const TASK_RECURRENCE_SETUP_SQL =
+`alter table public.custom_tasks
+  add column if not exists recurrence_group_id uuid;`;
+
 const CUSTOM_TASKS_SETUP_SQL =
 `create table if not exists public.custom_tasks (
   id uuid primary key default gen_random_uuid(),
@@ -1628,6 +1632,12 @@ async function getAverageDurationsByService(employeeId){
 
 async function taskOverlapColumnExists(){
   const { error } = await sb.from('custom_tasks').select('allow_overlap').limit(1);
+  if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
+  return true;
+}
+
+async function taskRecurrenceColumnExists(){
+  const { error } = await sb.from('custom_tasks').select('recurrence_group_id').limit(1);
   if (error && (error.code === '42703' || (error.message || '').toLowerCase().includes('column'))) return false;
   return true;
 }
