@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-<link rel="manifest" href="/manifest.json" />
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Agendă</title>
@@ -332,7 +331,7 @@
   .task-card{
     display:flex; gap:14px; align-items:flex-start; background:var(--surface);
     border:1px dashed var(--border); border-left:4px solid var(--accent-2);
-    border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px;
+    border-radius:var(--radius-md); padding:14px 14px; margin-bottom:10px; cursor:pointer;
   }
   .task-time{
     flex:none; width:56px; font-family:var(--font-display); font-weight:600;
@@ -343,7 +342,6 @@
   .task-title{ font-weight:600; font-size:14px; color:var(--ink); display:flex; align-items:center; gap:7px; }
   .task-color-dot{ width:9px; height:9px; border-radius:50%; flex:none; }
   .task-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
-  .task-actions{ display:flex; gap:6px; flex:none; }
 
   /* ---------- Panou „Urmează” (14 zile) ---------- */
   .upcoming-item{
@@ -603,6 +601,20 @@
   .settings-section{ margin-bottom:18px; }
   .settings-section h2{ font-family:var(--font-display); font-weight:600; font-size:17px; margin:0 0 4px 0; }
   .settings-section .settings-hint{ font-size:13px; color:var(--ink-soft); margin:0 0 14px 0; }
+  /* ---------- Jurnal de activitate ---------- */
+  .activity-log-summary{
+    font-family:var(--font-display); font-weight:600; font-size:17px; cursor:pointer; list-style:revert;
+  }
+  .activity-log-summary:hover{ color:var(--accent-dark); }
+  .activity-log-list{ display:flex; flex-direction:column; gap:7px; max-height:360px; overflow-y:auto; margin-top:4px; }
+  .activity-log-row{ font-size:12.5px; line-height:1.5; padding:7px 9px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--border); }
+  .activity-log-time{ color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-right:6px; }
+  .activity-log-action{ font-weight:700; margin-right:4px; }
+  .activity-log-action-creare{ color:var(--success); }
+  .activity-log-action-editare{ color:var(--accent-dark); }
+  .activity-log-action-anulare{ color:var(--warn); }
+  .activity-log-action-ștergere{ color:var(--danger); }
+  .activity-log-desc{ color:var(--ink); }
   .wd-row{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;
@@ -767,18 +779,26 @@
   .client-gallery-name{ font-weight:600; font-size:13px; margin-top:7px; }
   .client-gallery-tags{ display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:4px; }
 
-  /* ---------- Listă prețuri (printabilă, fără durată) ---------- */
-  .price-list-title{ font-family:var(--font-display); font-size:22px; text-align:center; margin:0 0 18px 0; }
-  .price-list-rows{ display:flex; flex-direction:column; gap:11px; }
-  .price-list-row{ display:flex; align-items:baseline; gap:8px; }
-  .price-list-name{ font-weight:600; font-size:14.5px; white-space:nowrap; }
-  .price-list-dots{ flex:1; border-bottom:1px dotted var(--border); margin-bottom:4px; }
-  .price-list-value{ font-weight:700; font-size:14.5px; color:var(--accent-dark); white-space:nowrap; }
-  @media print{
-    body *{ visibility:hidden; }
-    #priceListContent, #priceListContent *{ visibility:visible; }
-    #priceListContent{ position:absolute; top:0; left:0; width:100%; padding:24px; }
+  /* ---------- Listă de prețuri — ecran elegant, stil meniu de salon,
+     optimizat pentru screenshot (nu pentru print) ---------- */
+  dialog.price-list-dialog{
+    width:100vw; height:100vh; max-width:100vw; max-height:100vh; border-radius:0; top:0; left:0; transform:none;
+    background:linear-gradient(180deg, var(--accent-soft) 0%, var(--bg) 220px);
   }
+  .price-list-topbar{ display:flex; justify-content:flex-end; padding:14px 14px 0 14px; }
+  .price-list-card{ max-width:420px; margin:0 auto; padding:18px 28px 48px; text-align:center; }
+  .price-list-heading{
+    font-family:var(--font-display); font-weight:600; font-size:28px; color:var(--accent-dark);
+    margin:10px 0 4px 0; letter-spacing:.01em;
+  }
+  .price-list-sub{ font-size:11.5px; color:var(--ink-soft); letter-spacing:.16em; text-transform:uppercase; margin-bottom:22px; }
+  .price-list-divider{ width:52px; height:2px; background:var(--accent); margin:0 auto 28px auto; border-radius:2px; }
+  .price-list-rows{ display:flex; flex-direction:column; gap:15px; text-align:left; }
+  .price-list-row{ display:flex; align-items:baseline; gap:8px; }
+  .price-list-name{ font-family:var(--font-display); font-weight:500; font-size:16px; color:var(--ink); }
+  .price-list-dots{ flex:1; border-bottom:1px dotted var(--border); margin-bottom:4px; min-width:14px; }
+  .price-list-value{ font-weight:700; font-size:15.5px; color:var(--accent-dark); white-space:nowrap; }
+  .price-list-footer{ margin-top:34px; font-size:11px; color:var(--ink-soft); letter-spacing:.08em; }
 
   .hidden{ display:none !important; }
 </style>
@@ -883,6 +903,24 @@ to authenticated
 using (true)
 with check (true);`;
 
+const ACTIVITY_LOG_SETUP_SQL =
+`create table if not exists public.activity_log (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references public.employees(id) on delete cascade,
+  action text not null,
+  description text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.activity_log enable row level security;
+
+create policy "authenticated can manage activity_log"
+on public.activity_log
+for all
+to authenticated
+using (true)
+with check (true);`;
+
 /** Cele 3 ture predefinite pentru „celălalt job” — vezi selectorul din
  * Setări → Programul de la celălalt job. */
 const JOB_SHIFT_PRESETS = [
@@ -909,6 +947,8 @@ const hhmmToMinutes = str => { const [h,m] = str.split(':').map(Number); return 
 /** Formatează un obiect Date la "HH:MM" 24h, exact ce așteaptă .value la un
  * <input type="time"> — spre deosebire de fmtTime (afișare, locale-dependent). */
 const fmtTimeHHMM = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+/** "YYYY-MM-DD HH:MM" — folosit la afișarea liniilor din jurnalul de activitate. */
+const fmtDateTimeLog = d => `${ymd(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const mondayOf = d => { const wd=(d.getDay()+6)%7; const m=new Date(d.getFullYear(),d.getMonth(),d.getDate()); m.setDate(m.getDate()-wd); return m; };
 
 /* ---------- Mesaj de reamintire (Copiază + WhatsApp) ---------- */
@@ -1050,6 +1090,7 @@ const cache = {
   customTasks: [],
   vacations: [],
   reminderApptIds: new Set(),
+  clientApptCounts: new Map(),
   rangeFrom: null,
   rangeTo: null,
 };
@@ -1182,6 +1223,9 @@ async function trySyncOfflineQueue(){
         status: payload.status || 'unconfirmed',
       });
       syncedAppointments++;
+      const clientName = (state.clients.find(c => c.id === payload.clientId) || {}).name || 'Clientă';
+      const svc = state.services.find(s => s.id === payload.serviceId) || {};
+      logActivity('CREARE', `${clientName} - ${svc.name || 'serviciu'} (${Number(svc.price) || 0} lei) — sincronizat offline`);
     } catch (e){
       if (isNetworkError(e)) remainingAppointments.push(item);
       // altfel (ex: suprapunere) -> renunțăm la acea programare, e un caz marginal
@@ -1727,7 +1771,7 @@ function mapApptRow(row){
 
 async function getAppointments({ employeeId, from, to }){
   const { data, error } = await sb.from('appointments')
-    .select('*, clients(name), services(name, color)')
+    .select('*, clients(name), services(name, color, price)')
     .eq('employee_id', employeeId)
     .gte('start_time', from.toISOString())
     .lte('end_time', to.toISOString())
@@ -1736,9 +1780,50 @@ async function getAppointments({ employeeId, from, to }){
   return data.map(mapApptRow);
 }
 
+/** Numărul TOTAL de programări per clientă (nu doar din fereastra de cache
+ * de 3 luni) — folosit ca să sortăm clientele frecvente primele în selector. */
+async function getClientAppointmentCounts(employeeId){
+  const { data, error } = await sb.from('appointments').select('client_id').eq('employee_id', employeeId);
+  if (error) throw error;
+  const counts = new Map();
+  data.forEach(r => {
+    if (!r.client_id) return;
+    counts.set(r.client_id, (counts.get(r.client_id) || 0) + 1);
+  });
+  return counts;
+}
+
+/* ====================== JURNAL DE ACTIVITATE ====================== */
+async function activityLogTableExists(){
+  const { error } = await sb.from('activity_log').select('id').limit(1);
+  if (error && (error.code === '42P01' || (error.message || '').toLowerCase().includes('does not exist'))) return false;
+  return true;
+}
+
+/** Înregistrează o acțiune în jurnal — best-effort: dacă tabelul nu există
+ * încă sau cererea eșuează (ex: offline), NU blocăm și NU aruncăm eroare;
+ * acțiunea principală (creare/editare/ștergere programare) nu trebuie
+ * niciodată să dea greș din cauza unui log care n-a putut fi scris. */
+async function logActivity(action, description){
+  if (!state.employee) return;
+  try {
+    await sb.from('activity_log').insert({ employee_id: state.employee.id, action, description });
+  } catch (e){ /* ignorăm — logarea e secundară față de acțiunea reală */ }
+}
+
+async function getActivityLog(employeeId, limitCount){
+  const { data, error } = await sb.from('activity_log')
+    .select('action, description, created_at')
+    .eq('employee_id', employeeId)
+    .order('created_at', { ascending: false })
+    .limit(limitCount || 150);
+  if (error) throw error;
+  return data;
+}
+
 async function getUnconfirmedAppointments(employeeId){
   const { data, error } = await sb.from('appointments')
-    .select('*, clients(name), services(name, color)')
+    .select('*, clients(name), services(name, color, price)')
     .eq('employee_id', employeeId)
     .eq('status', 'unconfirmed')
     .order('start_time');
@@ -1765,7 +1850,7 @@ async function addAppointment({ employeeId, clientId, serviceId, start, end, not
     employee_id: employeeId, client_id: clientId, service_id: serviceId,
     start_time: start.toISOString(), end_time: end.toISOString(), notes: notes || null,
     status: status || 'unconfirmed',
-  }).select('*, clients(name), services(name, color)').single();
+  }).select('*, clients(name), services(name, color, price)').single();
   if (error){
     if (error.code === '23P01') throw new Error('Intervalul se suprapune cu o altă programare sau cu jobul principal.');
     throw error;
@@ -1877,18 +1962,20 @@ async function bulkLoadCache(){
   const today = new Date();
   const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const to = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999);
-  const [{ appts, blocks, tasks }, vacRes, clients, services, reminderIds] = await Promise.all([
+  const [{ appts, blocks, tasks }, vacRes, clients, services, reminderIds, clientApptCounts] = await Promise.all([
     loadApptsAndBlocksRange(from, to),
     getVacations(state.employee.id),
     getClients(),
     getServices(),
     getActiveReminderApptIds(state.employee.id),
+    getClientAppointmentCounts(state.employee.id).catch(() => new Map()),
   ]);
   cache.appointments = appts;
   cache.jobBlocks = blocks;
   cache.customTasks = tasks;
   cache.vacations = vacRes.list;
   cache.reminderApptIds = reminderIds;
+  cache.clientApptCounts = clientApptCounts;
   state.vacationsMissingTable = vacRes.missingTable;
   cache.rangeFrom = from;
   cache.rangeTo = to;
@@ -2559,20 +2646,15 @@ function renderAppointmentList(vac){
       }
       const taskColor = t.color || '#8B5CF6';
       return `
-        <div class="task-card ${past ? 'past-item' : ''}" style="border-left-color:${taskColor}">
+        <div class="task-card ${past ? 'past-item' : ''}" style="border-left-color:${taskColor}" data-task-id="${t.id}">
           <div class="task-time">${timeTop}<small>${timeBottom}</small></div>
           <div class="task-body">
             <div class="task-title"><span class="task-color-dot" style="background:${taskColor}"></span>${escapeHtml(t.title)}</div>
             <div class="task-sub">${isMultiDay ? `Sarcină pe mai multe zile (${fmtDateShort(t.start)} – ${fmtDateShort(t.end)})` : 'Sarcină / altă activitate'}</div>
           </div>
-          <div class="task-actions">
-            <button class="reminder-btn task-edit-btn" data-task-edit-id="${t.id}" title="Editează sarcina">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
+          <button class="appt-cancel" data-task-id="${t.id}" title="Șterge sarcina">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
       `;
     }
@@ -2642,10 +2724,11 @@ function renderAppointmentList(vac){
     });
   });
 
-  content.querySelectorAll('.task-edit-btn[data-task-edit-id]').forEach(btn => {
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const task = cache.customTasks.find(t => t.id === btn.dataset.taskEditId);
+  // click pe cardul sarcinii -> editare (exceptând butonul de ștergere)
+  content.querySelectorAll('.task-card[data-task-id]').forEach(card => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('.appt-cancel')) return;
+      const task = cache.customTasks.find(t => t.id === card.dataset.taskId);
       if (task) openNewTaskModal(task);
     });
   });
@@ -2700,6 +2783,9 @@ async function cancelAppointmentOptimistic(id){
     await cancelAppointment(id);
     updateToast(toastId, 'Programare anulată.', 'success', 1800);
     refreshUnconfirmedBadge();
+    if (previous){
+      logActivity('ANULARE', `${previous.clientName || 'Clientă'} - ${previous.serviceName || 'serviciu'} (${previous.servicePrice || 0} lei)`);
+    }
   } catch (e){
     if (idx >= 0 && previous) cache.appointments[idx] = previous;
     renderDayFromCache();
@@ -2731,6 +2817,9 @@ async function deleteAppointmentOptimistic(id){
     await deleteAppointmentRow(id);
     updateToast(toastId, 'Programare ștearsă definitiv.', 'success', 1800);
     refreshUnconfirmedBadge();
+    if (removed){
+      logActivity('ȘTERGERE', `${removed.clientName || 'Clientă'} - ${removed.serviceName || 'serviciu'} (${removed.servicePrice || 0} lei)`);
+    }
   } catch (e){
     if (removed) cache.appointments.push(removed);
     renderDayFromCache();
@@ -2768,7 +2857,17 @@ function renderClientList(prefix, query, onSelect, opts){
   const listEl = document.getElementById(`${prefix}ClientList`);
   if (!listEl) return;
   const q = (query || '').trim().toLowerCase();
-  const filtered = !q ? state.clients : state.clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q));
+  let filtered = !q ? state.clients : state.clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q));
+  if (!opts.showActions){
+    // Selectorul din modalele de Adăugare/Editare programare: clientele cu
+    // cele mai multe programări apar primele; la egalitate (inclusiv 0),
+    // rămâne ordinea alfabetică.
+    filtered = [...filtered].sort((a, b) => {
+      const diff = (cache.clientApptCounts.get(b.id) || 0) - (cache.clientApptCounts.get(a.id) || 0);
+      if (diff !== 0) return diff;
+      return a.name.localeCompare(b.name, 'ro');
+    });
+  }
   if (filtered.length === 0){
     listEl.innerHTML = `<div class="client-empty">Nicio clientă găsită.</div>`;
     return;
@@ -3027,6 +3126,14 @@ async function renderSettingsScreen(){
           </div>
         </section>
 
+        <section class="panel settings-section">
+          <details id="activityLogDetails">
+            <summary class="activity-log-summary">📋 Jurnal de activitate / Log comenzi</summary>
+            <div id="activityLogSetupNote" style="margin-top:10px;"></div>
+            <div id="activityLogContent" style="margin-top:10px;"></div>
+          </details>
+        </section>
+
       </div>
     </div>
     ${bottomNavHtml()}
@@ -3059,6 +3166,13 @@ async function renderSettingsScreen(){
   document.getElementById('refreshNotifStatusBtn').addEventListener('click', loadNotificationStatusPanel);
   refreshNotifButtonLabel();
   loadNotificationStatusPanel();
+  let activityLogLoaded = false;
+  document.getElementById('activityLogDetails').addEventListener('toggle', (e) => {
+    if (e.target.open && !activityLogLoaded){
+      activityLogLoaded = true;
+      loadActivityLogSection();
+    }
+  });
   wireBottomNav();
   wirePwaInstallButton('pwaInstallBtn', 'pwaInstallSection');
 
@@ -3067,6 +3181,48 @@ async function renderSettingsScreen(){
   state.paidAmountColumnOk = await paidAmountColumnExists();
   await loadStats();
   await loadVacationsSection();
+}
+
+/* ---------- Jurnal de activitate ---------- */
+async function loadActivityLogSection(){
+  const note = document.getElementById('activityLogSetupNote');
+  const content = document.getElementById('activityLogContent');
+  if (!state.employee) return;
+  content.innerHTML = `<div class="spinner"></div>`;
+  let ok;
+  try { ok = await activityLogTableExists(); }
+  catch (e){ content.innerHTML = `<p class="error-text">Eroare: ${escapeHtml(e.message || e)}</p>`; return; }
+
+  if (!ok){
+    note.innerHTML = `
+      <div class="setup-note">
+        Tabelul pentru jurnalul de activitate nu există încă în Supabase. Rulează o singură dată acest SQL în
+        <strong>Supabase → SQL Editor</strong>, apoi revino aici.
+        <pre>${escapeHtml(ACTIVITY_LOG_SETUP_SQL)}</pre>
+        <button class="btn-outline" id="copyActivityLogSqlBtn" type="button">Copiază SQL</button>
+      </div>`;
+    content.innerHTML = '';
+    document.getElementById('copyActivityLogSqlBtn').addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText(ACTIVITY_LOG_SETUP_SQL); e.target.textContent = 'Copiat!'; setTimeout(() => { e.target.textContent = 'Copiază SQL'; }, 1800); }
+      catch (err){ alert('Nu am putut copia automat — selectează manual textul de mai sus.'); }
+    });
+    return;
+  }
+  note.innerHTML = '';
+  try {
+    const rows = await getActivityLog(state.employee.id, 150);
+    if (rows.length === 0){
+      content.innerHTML = `<p class="settings-hint" style="margin:0;">Niciun jurnal încă.</p>`;
+      return;
+    }
+    content.innerHTML = `<div class="activity-log-list">${rows.map(r => `
+      <div class="activity-log-row">
+        <span class="activity-log-time">[${fmtDateTimeLog(new Date(r.created_at))}]</span><span class="activity-log-action activity-log-action-${(r.action || '').toLowerCase()}">${escapeHtml(r.action)}</span> <span class="activity-log-desc">programare: ${escapeHtml(r.description)}</span>
+      </div>
+    `).join('')}</div>`;
+  } catch (e){
+    content.innerHTML = `<p class="error-text">Eroare la încărcarea jurnalului: ${escapeHtml(e.message || e)}</p>`;
+  }
 }
 
 /* ---------- Concedii ---------- */
@@ -4253,42 +4409,42 @@ function ensurePriceListModal(){
   if (document.getElementById('priceListModal')) return;
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <dialog id="priceListModal">
-      <div class="sheet-header">
-        <div class="sheet-title">Listă prețuri</div>
+    <dialog id="priceListModal" class="price-list-dialog">
+      <div class="price-list-topbar">
         <button type="button" class="icon-btn" id="closePriceListModal">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div class="sheet-body">
-        <div id="priceListContent"></div>
-        <button type="button" class="btn-primary" id="printPriceListBtn" style="margin-top:16px;">🖨️ Printează / Salvează PDF</button>
-      </div>
+      <div id="priceListContent"></div>
     </dialog>
   `;
   document.body.appendChild(wrap.firstElementChild);
   wireDialogBackdropClose(document.getElementById('priceListModal'));
   document.getElementById('closePriceListModal').addEventListener('click', () => document.getElementById('priceListModal').close());
-  document.getElementById('printPriceListBtn').addEventListener('click', () => window.print());
 }
 
 function renderPriceListContent(){
   const wrap = document.getElementById('priceListContent');
   if (!wrap) return;
   if (state.services.length === 0){
-    wrap.innerHTML = `<p class="settings-hint">Niciun serviciu activ.</p>`;
+    wrap.innerHTML = `<p class="settings-hint" style="text-align:center; padding:40px 20px;">Niciun serviciu activ.</p>`;
     return;
   }
   wrap.innerHTML = `
-    <h2 class="price-list-title">Lista prețuri</h2>
-    <div class="price-list-rows">
-      ${state.services.map(s => `
-        <div class="price-list-row">
-          <span class="price-list-name">${escapeHtml(s.name)}</span>
-          <span class="price-list-dots"></span>
-          <span class="price-list-value">${Number(s.price).toLocaleString('ro-RO')} lei</span>
-        </div>
-      `).join('')}
+    <div class="price-list-card">
+      <div class="price-list-heading">Lista de Prețuri</div>
+      <div class="price-list-sub">Servicii &amp; tarife</div>
+      <div class="price-list-divider"></div>
+      <div class="price-list-rows">
+        ${state.services.map(s => `
+          <div class="price-list-row">
+            <span class="price-list-name">${escapeHtml(s.name)}</span>
+            <span class="price-list-dots"></span>
+            <span class="price-list-value">${Number(s.price).toLocaleString('ro-RO')} lei</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="price-list-footer">✂️ Programează-te oricând ✂️</div>
     </div>
   `;
 }
@@ -5144,10 +5300,13 @@ async function saveAppointment(){
     clientName: modalState.selectedClient.name,
     serviceName: modalState.selectedService.name,
     serviceColor: modalState.selectedService.color,
+    servicePrice: Number(modalState.selectedService.price) || 0,
+    paidAmount: null,
     optimisticPending: true,
   };
 
   cache.appointments.push(optimistic);
+  cache.clientApptCounts.set(clientId, (cache.clientApptCounts.get(clientId) || 0) + 1);
   document.getElementById('addModal').close();
   syncMainViewToDay(modalState.day);
   renderDayFromCache();
@@ -5175,6 +5334,7 @@ async function saveAppointment(){
     renderCalendar();
     refreshUnconfirmedBadge();
     updateToast(toastId, 'Programare salvată.', 'success', 1800);
+    logActivity('CREARE', `${modalState.selectedClient.name} - ${modalState.selectedService.name} (${Number(modalState.selectedService.price) || 0} lei)`);
   } catch (e){
     if (isNetworkError(e)){
       goOffline();
@@ -5546,6 +5706,7 @@ async function saveEditAppointment(){
     clientId: editState.selectedClient.id,
     serviceName: editState.selectedService.name,
     serviceColor: editState.selectedService.color,
+    servicePrice: Number(editState.selectedService.price) || 0,
     clientName: editState.selectedClient.name,
     notes: notes || null,
     status,
@@ -5579,6 +5740,7 @@ async function saveEditAppointment(){
     await updateAppointmentRow(id, payload);
     refreshUnconfirmedBadge();
     updateToast(toastId, 'Programare actualizată.', 'success', 1800);
+    logActivity('EDITARE', `${editState.selectedClient.name} - ${editState.selectedService.name} (${Number(editState.selectedService.price) || 0} lei)`);
   } catch (e){
     if (idx >= 0 && previous) cache.appointments[idx] = previous;
     renderDayFromCache();
