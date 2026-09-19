@@ -1,8 +1,8 @@
 {
   "name": "Agenda programari",
   "short_name": "Agenda",
-  "description": "Agenda",
-  "start_url": "https://deploy-preview-1--annenails.netlify.app/#/",
+  "description": "Agenda programari salon",
+  "start_url": "./",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -13,13 +13,13 @@
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
