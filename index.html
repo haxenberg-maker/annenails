@@ -634,6 +634,15 @@
   .wd-off input{ width:15px; height:15px; flex:none; }
   .task-overlap-label{ display:flex; align-items:center; gap:7px; font-size:13.5px; color:var(--ink); font-weight:600; cursor:pointer; }
   .task-overlap-label input{ width:17px; height:17px; flex:none; }
+  /* ---------- Sarcini repetitive ---------- */
+  .recur-pills{ display:flex; flex-wrap:wrap; gap:8px; }
+  .recur-pill{
+    flex:1 1 auto; min-width:90px; text-align:center; padding:9px 10px;
+    border-radius:999px; border:1.5px solid var(--border); background:var(--surface);
+    color:var(--ink-soft); font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .recur-pill:hover{ border-color:var(--accent); }
+  .recur-pill.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
   /* ---------- Durată reală medie per serviciu ---------- */
   .duration-stats-list{ display:flex; flex-direction:column; gap:10px; }
   .duration-stats-row{ padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg); }
@@ -692,6 +701,7 @@
   .model-name{ font-weight:600; font-size:14.5px; }
   .model-swatch{ width:11px; height:11px; border-radius:50%; flex:none; border:1px solid rgba(0,0,0,.08); }
   .model-meta{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+  .model-avg-duration{ font-size:11.5px; color:var(--accent-dark); margin-top:2px; font-weight:600; }
   .model-desc{ font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.4; }
   .model-actions{ display:flex; gap:14px; margin-top:8px; }
   .model-actions .link-btn{ font-size:12.5px; padding:0; }
@@ -1766,6 +1776,32 @@ async function updateCustomTask(id, { title, start, end, color, allowOverlap }){
   if (state.taskOverlapColumnOk) payload.allow_overlap = !!allowOverlap;
   const { error } = await sb.from('custom_tasks').update(payload).eq('id', id);
   if (error) throw error;
+}
+
+/** Creează mai multe sarcini deodată (sarcini repetitive zilnic/săptămânal/
+ * lunar) — un singur insert, ca să nu creezi manual aceeași sarcină de N
+ * ori. Fiecare instanță e o sarcină obișnuită, independentă (poate fi
+ * editată/ștearsă separat după aceea). */
+async function createCustomTasksBulk(rows){
+  const { error } = await sb.from('custom_tasks').insert(rows);
+  if (error) throw error;
+}
+
+/** Generează perechile start/end pentru o sarcină repetitivă, păstrând
+ * durata originală (diferența dintre start și end). „monthly” folosește
+ * setMonth — pentru date de 29-31, luna următoare poate „aluneca" pe
+ * câteva zile dacă acea lună e mai scurtă (comportament standard JS Date). */
+function generateRecurrenceDates(startBase, endBase, type, count){
+  const durationMs = endBase.getTime() - startBase.getTime();
+  const pairs = [];
+  for (let i = 0; i < count; i++){
+    const s = new Date(startBase);
+    if (type === 'daily') s.setDate(s.getDate() + i);
+    else if (type === 'weekly') s.setDate(s.getDate() + i * 7);
+    else if (type === 'monthly') s.setMonth(s.getMonth() + i);
+    pairs.push({ start: s, end: new Date(s.getTime() + durationMs) });
+  }
+  return pairs;
 }
 
 async function deleteCustomTask(id){
@@ -4375,13 +4411,21 @@ async function loadServicesSection(){
 
   try { state.services = await getServices(); }
   catch (e){ list.innerHTML = `<p class="error-text">Eroare la încărcarea serviciilor: ${escapeHtml(e.message || e)}</p>`; return; }
+
+  if (state.employee){
+    try {
+      const { rows } = await getAverageDurationsByService(state.employee.id);
+      modelsState.avgDurations = new Map(rows.map(r => [r.serviceId, r]));
+    } catch (e){ modelsState.avgDurations = new Map(); }
+  }
+
   modelsState.activeTag = 'Toate';
   renderTagPills();
   renderServicesList();
 }
 
 /* ---------- FEATURE 3: Galerie modele cu imagini multiple & hashtag-uri ---------- */
-const modelsState = { activeTag: 'Toate' };
+const modelsState = { activeTag: 'Toate', avgDurations: new Map() };
 
 function allServiceTags(){
   const set = new Set();
@@ -4434,6 +4478,7 @@ function renderServicesList(){
           <span class="model-name">${escapeHtml(s.name)}</span>
         </div>
         <div class="model-meta">${s.durationMinutes} min · ${s.price} lei${imgs.length > 1 ? ` · ${imgs.length} poze` : ''}</div>
+        ${modelsState.avgDurations.has(s.id) ? `<div class="model-avg-duration">⏱️ ${modelsState.avgDurations.get(s.id).avgMinutes} min în medie, real (${modelsState.avgDurations.get(s.id).count} programări)</div>` : ''}
         ${s.description ? `<div class="model-desc">${escapeHtml(s.description)}</div>` : ''}
         ${extraThumbs.length ? `<div class="model-gallery-strip">${extraThumbs.map((u, i) => `<img class="model-gallery-thumb" src="${escapeHtml(u)}" data-svc="${s.id}" data-img="${i + 1}" alt="" />`).join('')}</div>` : ''}
         ${(s.tags && s.tags.length) ? `<div class="model-tags">${s.tags.map(t => `<button type="button" class="model-tag-pill" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join('')}</div>` : ''}
@@ -5249,6 +5294,19 @@ function ensureNewTaskModal(){
           <p class="settings-hint" style="margin:2px 0 0 0;">Bifată: chiar dacă ai această sarcină, tot poți programa o clientă în același interval.</p>
           <div class="hidden" id="taskOverlapSetupNote" style="margin-top:4px;"></div>
         </div>
+        <div class="field" id="taskRecurrenceField">
+          <label>Repetă</label>
+          <div class="recur-pills" id="taskRecurrencePills">
+            <button type="button" class="recur-pill active" data-recur="none">Nu se repetă</button>
+            <button type="button" class="recur-pill" data-recur="daily">Zilnic</button>
+            <button type="button" class="recur-pill" data-recur="weekly">Săptămânal</button>
+            <button type="button" class="recur-pill" data-recur="monthly">Lunar</button>
+          </div>
+          <div class="field hidden" id="taskRecurrenceCountField" style="margin-top:10px;">
+            <label for="taskRecurrenceCount">De câte ori (inclusiv prima)</label>
+            <input type="number" id="taskRecurrenceCount" min="2" max="60" value="10" />
+          </div>
+        </div>
         <p class="error-text hidden" id="newTaskError"></p>
         <button class="btn-primary" id="saveNewTaskBtn" style="margin-top:14px;">Salvează sarcina</button>
       </div>
@@ -5265,9 +5323,16 @@ function ensureNewTaskModal(){
       sw.classList.add('active');
     });
   });
+  document.querySelectorAll('#taskRecurrencePills .recur-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      taskModalState.recurrence = pill.dataset.recur;
+      document.querySelectorAll('#taskRecurrencePills .recur-pill').forEach(p => p.classList.toggle('active', p === pill));
+      document.getElementById('taskRecurrenceCountField').classList.toggle('hidden', pill.dataset.recur === 'none');
+    });
+  });
 }
 
-const taskModalState = { editingId: null };
+const taskModalState = { editingId: null, recurrence: 'none' };
 
 async function openNewTaskModal(task){
   ensureNewTaskModal();
@@ -5298,6 +5363,14 @@ async function openNewTaskModal(task){
     document.getElementById('taskAllowOverlap').checked = false;
   }
   document.getElementById('newTaskError').classList.add('hidden');
+
+  // Repetiția are sens doar la crearea unei sarcini noi, nu la editare.
+  const recurField = document.getElementById('taskRecurrenceField');
+  taskModalState.recurrence = 'none';
+  document.querySelectorAll('#taskRecurrencePills .recur-pill').forEach(p => p.classList.toggle('active', p.dataset.recur === 'none'));
+  document.getElementById('taskRecurrenceCountField').classList.add('hidden');
+  document.getElementById('taskRecurrenceCount').value = '10';
+  recurField.classList.toggle('hidden', !!task);
 
   const overlapOk = await taskOverlapColumnExists().catch(() => false);
   state.taskOverlapColumnOk = overlapOk;
@@ -5392,6 +5465,26 @@ async function saveNewTask(){
       const idx = cache.customTasks.findIndex(t => t.id === editingId);
       if (idx >= 0) cache.customTasks[idx] = { ...cache.customTasks[idx], title, start, end, color, allowOverlap };
       updateToast(toastId, 'Sarcină actualizată.', 'success', 1800);
+    } else if (taskModalState.recurrence !== 'none'){
+      const countRaw = parseInt(document.getElementById('taskRecurrenceCount').value, 10);
+      const count = Math.min(60, Math.max(2, isNaN(countRaw) ? 10 : countRaw));
+      const occurrences = generateRecurrenceDates(start, end, taskModalState.recurrence, count);
+      const rows = occurrences.map(o => {
+        const row = {
+          employee_id: state.employee.id, title, start_time: o.start.toISOString(), end_time: o.end.toISOString(),
+          color: color || DEFAULT_TASK_COLOR,
+        };
+        if (state.taskOverlapColumnOk) row.allow_overlap = !!allowOverlap;
+        return row;
+      });
+      await createCustomTasksBulk(rows);
+      occurrences.forEach(o => {
+        cache.customTasks.push({
+          id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
+          employeeId: state.employee.id, title, start: o.start, end: o.end, color, allowOverlap,
+        });
+      });
+      updateToast(toastId, `${count} sarcini repetate, salvate.`, 'success', 2200);
     } else {
       await createCustomTask({ employeeId: state.employee.id, title, start, end, color, allowOverlap });
       cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color, allowOverlap });
@@ -5402,6 +5495,7 @@ async function saveNewTask(){
     renderCalendar();
     document.getElementById('newTaskModal').close();
     taskModalState.editingId = null;
+    taskModalState.recurrence = 'none';
     // Reconciliem cu rândul real din Supabase (id-ul corect), fără să blocăm UI-ul.
     forceRefreshCache().then(() => {
       renderDayFromCache();
