@@ -1796,8 +1796,9 @@ async function updateCustomTask(id, { title, start, end, color, allowOverlap }){
  * ori. Fiecare instanță e o sarcină obișnuită, independentă (poate fi
  * editată/ștearsă separat după aceea). */
 async function createCustomTasksBulk(rows){
-  const { error } = await sb.from('custom_tasks').insert(rows);
+  const { data, error } = await sb.from('custom_tasks').insert(rows).select('id, start_time');
   if (error) throw error;
+  return data || [];
 }
 
 /** Generează perechile start/end pentru o sarcină repetitivă, păstrând
@@ -5575,7 +5576,14 @@ async function saveNewTask(){
         if (state.taskRecurrenceColumnOk) row.recurrence_group_id = recurrenceGroupId;
         return row;
       });
-      await createCustomTasksBulk(rows);
+      await createCustomTasksBulk(rows).then(inserted => {
+        if (inserted.length !== rows.length){
+          const missingDates = rows
+            .filter(r => !inserted.some(ins => ins.start_time === r.start_time))
+            .map(r => fmtDateShort(new Date(r.start_time)));
+          showToast(`Atenție: doar ${inserted.length} din ${rows.length} sarcini s-au salvat. Lipsesc: ${missingDates.join(', ')}.`, 'error', { autoHide: 6000 });
+        }
+      });
       occurrences.forEach(o => {
         cache.customTasks.push({
           id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
