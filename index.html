@@ -264,6 +264,8 @@
   .confirm-message{ font-size:14px; color:var(--ink-soft); line-height:1.45; }
   .confirm-actions{ display:flex; gap:10px; }
   .confirm-actions button{ flex:1; }
+  .recur-delete-actions{ flex-direction:column; }
+  .recur-delete-actions button{ width:100%; }
   .btn-danger{
     width:100%; padding:13px 14px; border-radius:var(--radius-sm);
     background:var(--danger); color:#fff; border:none; font-size:15px; font-weight:600;
@@ -1109,6 +1111,7 @@ const state = {
   paidAmountColumnOk: false,
   actualDurationColumnOk: false,
   taskOverlapColumnOk: false,
+  taskRecurrenceColumnOk: false,
   customTasksTableOk: false,
   vacationsMissingTable: false,
   pendingAppointments: [],
@@ -1819,6 +1822,11 @@ async function deleteCustomTask(id){
   if (error) throw error;
 }
 
+async function deleteCustomTasksBulk(ids){
+  const { error } = await sb.from('custom_tasks').delete().in('id', ids);
+  if (error) throw error;
+}
+
 /** Adaugă un memento suplimentar (push) pentru o programare anume, pe lângă
  * cel automat calculat din intervalul implicit al angajatei. */
 /** Id-urile programărilor care au cel puțin un memento încă „pending”
@@ -2059,6 +2067,7 @@ async function loadApptsAndBlocksRange(from, to){
   const tasks = tasksRaw.map(t => ({
     id: t.id, employeeId: t.employee_id, start: new Date(t.start_time), end: new Date(t.end_time), title: t.title,
     color: t.color || DEFAULT_TASK_COLOR, allowOverlap: !!t.allow_overlap,
+    recurrenceGroupId: t.recurrence_group_id || null,
   }));
   return { appts, blocks, tasks };
 }
@@ -2120,7 +2129,13 @@ async function forceRefreshCache(){
     ]);
     cache.appointments = appts;
     cache.jobBlocks = blocks;
-    cache.customTasks = tasks;
+    // Păstrăm sarcinile din afara ferestrei curente de cache (ex: instanțele
+    // unei serii repetitive lunare care se întind peste mai multe luni
+    // viitoare) — altfel dispăreau din calendar imediat după creare, deși
+    // erau salvate corect în Supabase. Cele din interiorul ferestrei vin
+    // mereu proaspete din fetch (nicio duplicare posibilă).
+    const outsideRange = cache.customTasks.filter(t => t.start < cache.rangeFrom || t.start > cache.rangeTo);
+    cache.customTasks = [...tasks, ...outsideRange];
     cache.reminderApptIds = reminderIds;
   } catch (e){ /* offline — păstrăm ce avem local */ }
 }
@@ -2452,6 +2467,48 @@ function confirmDialog({ title = 'Confirmare', message = '', confirmLabel = 'Șt
     confirmBtn.addEventListener('click', onConfirm);
     cancelBtn.addEventListener('click', onCancel);
     dlg.addEventListener('cancel', onCancel); // tasta Esc
+    dlg.showModal();
+  });
+}
+
+/** Dialog cu 3 variante pentru ștergerea unei sarcini dintr-o serie
+ * repetitivă — returnează 'one' | 'following' | 'all' | 'cancel'. */
+function ensureRecurrenceDeleteChoiceDialog(){
+  if (document.getElementById('recurDeleteDialog')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <dialog id="recurDeleteDialog">
+      <div class="confirm-body">
+        <div class="confirm-title">Șterge sarcina repetitivă</div>
+        <div class="confirm-message">Această sarcină face parte dintr-o serie repetitivă. Ce vrei să ștergi?</div>
+      </div>
+      <div class="confirm-actions recur-delete-actions">
+        <button type="button" class="btn-outline" data-scope="one">Doar această sarcină</button>
+        <button type="button" class="btn-outline" data-scope="following">Aceasta și cele care urmează</button>
+        <button type="button" class="btn-danger" data-scope="all">Toate sarcinile din serie</button>
+        <button type="button" class="btn-outline" data-scope="cancel">Renunță</button>
+      </div>
+    </dialog>
+  `;
+  document.body.appendChild(wrap.firstElementChild);
+  wireDialogBackdropClose(document.getElementById('recurDeleteDialog'));
+}
+
+function chooseRecurrenceDeleteScope(){
+  ensureRecurrenceDeleteChoiceDialog();
+  const dlg = document.getElementById('recurDeleteDialog');
+  return new Promise((resolve) => {
+    const buttons = Array.from(dlg.querySelectorAll('[data-scope]'));
+    const cleanup = (result) => {
+      buttons.forEach(b => b.removeEventListener('click', onClick));
+      dlg.removeEventListener('cancel', onCancel);
+      dlg.close();
+      resolve(result);
+    };
+    const onClick = (e) => cleanup(e.currentTarget.dataset.scope);
+    const onCancel = () => cleanup('cancel');
+    buttons.forEach(b => b.addEventListener('click', onClick));
+    dlg.addEventListener('cancel', onCancel);
     dlg.showModal();
   });
 }
@@ -2865,22 +2922,47 @@ function renderAppointmentList(vac){
 }
 
 /** Șterge o sarcină custom cu actualizare optimistă a UI-ului. */
+/** Șterge o sarcină. Dacă face parte dintr-o serie repetitivă cu alte
+ * instanțe încă prezente, întreabă mai întâi ce anume se șterge: doar
+ * aceasta, aceasta + cele care urmează, sau toată seria. */
 async function deleteCustomTaskOptimistic(id){
-  if (!(await confirmDialog({ title: 'Ștergi sarcina?', message: 'Această acțiune nu poate fi anulată.', confirmLabel: 'Șterge' }))) return;
-  const idx = cache.customTasks.findIndex(t => t.id === id);
-  const previous = idx >= 0 ? cache.customTasks[idx] : null;
-  if (idx >= 0) cache.customTasks.splice(idx, 1);
+  const task = cache.customTasks.find(t => t.id === id);
+  const seriesMates = (task && task.recurrenceGroupId)
+    ? cache.customTasks.filter(t => t.recurrenceGroupId === task.recurrenceGroupId)
+    : [];
+
+  let idsToDelete = [id];
+
+  if (seriesMates.length > 1){
+    const scope = await chooseRecurrenceDeleteScope();
+    if (scope === 'cancel' || !scope) return;
+    if (scope === 'following'){
+      idsToDelete = seriesMates.filter(t => t.start >= task.start).map(t => t.id);
+    } else if (scope === 'all'){
+      idsToDelete = seriesMates.map(t => t.id);
+    }
+    // scope === 'one' -> rămâne idsToDelete = [id]
+  } else {
+    if (!(await confirmDialog({ title: 'Ștergi sarcina?', message: 'Această acțiune nu poate fi anulată.', confirmLabel: 'Șterge' }))) return;
+  }
+
+  const removedEntries = cache.customTasks.filter(t => idsToDelete.includes(t.id));
+  cache.customTasks = cache.customTasks.filter(t => !idsToDelete.includes(t.id));
   renderDayFromCache();
   computeMonthDayColorsFromCache();
   renderCalendar();
+
+  const toastId = showToast('Se șterge…', 'saving', { persist: true });
   try {
-    await deleteCustomTask(id);
+    if (idsToDelete.length === 1) await deleteCustomTask(idsToDelete[0]);
+    else await deleteCustomTasksBulk(idsToDelete);
+    updateToast(toastId, idsToDelete.length > 1 ? `${idsToDelete.length} sarcini șterse.` : 'Sarcină ștearsă.', 'success', 1800);
   } catch (e){
-    if (previous) cache.customTasks.splice(idx, 0, previous);
+    cache.customTasks.push(...removedEntries);
     renderDayFromCache();
     computeMonthDayColorsFromCache();
     renderCalendar();
-    showToast('Eroare la ștergerea sarcinii: ' + (e.message || e), 'error', { autoHide: 3000 });
+    updateToast(toastId, 'Eroare la ștergerea sarcinii: ' + (e.message || e), 'error', 3200);
   }
 }
 
@@ -5405,6 +5487,10 @@ async function openNewTaskModal(task){
     overlapNote.innerHTML = '';
   }
 
+  // Verificare silențioasă — dacă lipsește, sarcinile repetitive tot se
+  // creează normal, doar nu vor putea fi grupate ca serie la ștergere.
+  state.taskRecurrenceColumnOk = await taskRecurrenceColumnExists().catch(() => false);
+
   const note = document.getElementById('newTaskSetupNote');
   const saveBtn = document.getElementById('saveNewTaskBtn');
   const tasksOk = await customTasksTableExists();
@@ -5479,12 +5565,14 @@ async function saveNewTask(){
       const countRaw = parseInt(document.getElementById('taskRecurrenceCount').value, 10);
       const count = Math.min(60, Math.max(2, isNaN(countRaw) ? 10 : countRaw));
       const occurrences = generateRecurrenceDates(start, end, taskModalState.recurrence, count);
+      const recurrenceGroupId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
       const rows = occurrences.map(o => {
         const row = {
           employee_id: state.employee.id, title, start_time: o.start.toISOString(), end_time: o.end.toISOString(),
           color: color || DEFAULT_TASK_COLOR,
         };
         if (state.taskOverlapColumnOk) row.allow_overlap = !!allowOverlap;
+        if (state.taskRecurrenceColumnOk) row.recurrence_group_id = recurrenceGroupId;
         return row;
       });
       await createCustomTasksBulk(rows);
@@ -5492,6 +5580,7 @@ async function saveNewTask(){
         cache.customTasks.push({
           id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
           employeeId: state.employee.id, title, start: o.start, end: o.end, color, allowOverlap,
+          recurrenceGroupId: state.taskRecurrenceColumnOk ? recurrenceGroupId : null,
         });
       });
       updateToast(toastId, `${count} sarcini repetate, salvate.`, 'success', 2200);
