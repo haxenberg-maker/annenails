@@ -2663,7 +2663,12 @@ function computeMonthDayColorsFromCache(){
       .filter(b => b.employeeId === state.employee.id && b.start.getFullYear() === y && b.start.getMonth() === m)
       .forEach(b => push(ymd(b.start), 'var(--job-block-dot)'));
     const monthStart = new Date(y, m, 1);
-    const monthEnd = new Date(y, m + 1, 0);
+    // IMPORTANT: sfârșitul lunii trebuie să includă tot ziua respectivă
+    // (23:59:59.999), nu doar miezul nopții — altfel o sarcină cu orice oră
+    // de sfârșit mai târzie de 00:00 pe ULTIMA zi a lunii (ex: 31 aug, 30
+    // sep, 30 nov) era exclusă de Math.min de mai jos, iar bulina ei nu mai
+    // apărea deloc pe acea zi în minicalendar.
+    const monthEnd = new Date(y, m + 1, 0, 23, 59, 59, 999);
     // Sarcinile custom pot acoperi mai multe zile — punem bulina lor pe fiecare
     // zi din interval care cade în luna afișată.
     cache.customTasks.filter(t => t.employeeId === state.employee.id).forEach(t => {
