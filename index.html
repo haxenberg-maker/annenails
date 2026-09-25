@@ -14,22 +14,22 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#FCF0F5;
+    --bg:#FCE9F2;
     --surface:#FFFFFF;
-    --border:#F5D9E6;
+    --border:#F3C4DC;
     --ink:#3A2430;
     --ink-soft:#966E80;
     --accent:#D6336C;
     --accent-dark:#A8244F;
-    --accent-soft:#FBDCE6;
+    --accent-soft:#F9CBE0;
     --accent-2:#C2487B;
     --success:#4C7A5D;
     --success-soft:#E4EEE6;
-    --muted:#C9A2B3;
+    --muted:#D89CBB;
     --warn:#B8860B;
     --info:#2E5F8A;
-    --job-block:#A8788C;
-    --job-block-soft:#F6E7ED;
+    --job-block:#B87A9E;
+    --job-block-soft:#F3DCEA;
     --job-block-dot:#262626;
     --danger:#D93838;
     --radius-lg:22px;
@@ -807,22 +807,26 @@
      optimizat pentru screenshot (nu pentru print) ---------- */
   dialog.price-list-dialog{
     width:100vw; height:100vh; max-width:100vw; max-height:100vh; border-radius:0; top:0; left:0; transform:none;
-    background:linear-gradient(180deg, var(--accent-soft) 0%, var(--bg) 220px);
+    background:linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 40%, var(--accent-soft) 78%, var(--bg) 100%);
   }
   .price-list-topbar{ display:flex; justify-content:flex-end; padding:14px 14px 0 14px; }
-  .price-list-card{ max-width:420px; margin:0 auto; padding:18px 28px 48px; text-align:center; }
+  .price-list-card{
+    max-width:420px; margin:22px auto 0; padding:26px 28px 50px; text-align:center;
+    background:var(--surface); border-radius:var(--radius-lg);
+    border:1px solid var(--accent-soft); box-shadow:0 18px 44px rgba(168,36,79,0.32);
+  }
   .price-list-heading{
     font-family:var(--font-display); font-weight:600; font-size:28px; color:var(--accent-dark);
     margin:10px 0 4px 0; letter-spacing:.01em;
   }
-  .price-list-sub{ font-size:11.5px; color:var(--ink-soft); letter-spacing:.16em; text-transform:uppercase; margin-bottom:22px; }
-  .price-list-divider{ width:52px; height:2px; background:var(--accent); margin:0 auto 28px auto; border-radius:2px; }
+  .price-list-sub{ font-size:11.5px; color:var(--accent-2); letter-spacing:.16em; text-transform:uppercase; margin-bottom:22px; }
+  .price-list-divider{ width:52px; height:3px; background:linear-gradient(90deg, var(--accent), var(--accent-2)); margin:0 auto 28px auto; border-radius:2px; }
   .price-list-rows{ display:flex; flex-direction:column; gap:15px; text-align:left; }
   .price-list-row{ display:flex; align-items:baseline; gap:8px; }
   .price-list-name{ font-family:var(--font-display); font-weight:500; font-size:16px; color:var(--ink); }
-  .price-list-dots{ flex:1; border-bottom:1px dotted var(--border); margin-bottom:4px; min-width:14px; }
+  .price-list-dots{ flex:1; border-bottom:1px dotted var(--accent-soft); margin-bottom:4px; min-width:14px; }
   .price-list-value{ font-weight:700; font-size:15.5px; color:var(--accent-dark); white-space:nowrap; }
-  .price-list-footer{ margin-top:34px; font-size:11px; color:var(--ink-soft); letter-spacing:.08em; }
+  .price-list-footer{ margin-top:34px; font-size:11px; color:var(--accent-2); letter-spacing:.08em; }
 
   .hidden{ display:none !important; }
 </style>
