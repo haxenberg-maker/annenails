@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Fundal Bordo rotunjit -->
+  <rect width="64" height="64" rx="16" fill="#8A1C41"/>
+  
+  <!-- Capac sticluță oja -->
+  <rect x="27" y="12" width="10" height="16" rx="3" fill="#2B2B2B"/>
+  
+  <!-- Corp sticluță -->
+  <path d="M20 32C20 30 22 28 24 28H40C42 28 44 30 44 32V48C44 52 40 54 36 54H28C24 54 20 52 20 48V32Z" fill="#FFFFFF"/>
+  
+  <!-- Ojă roz în sticlă -->
+  <path d="M22 36C22 36 26 38 32 38C38 38 42 36 42 36V48C42 51 39 52 36 52H28C25 52 22 51 22 48V36Z" fill="#E84A5F"/>
+  
+  <!-- Reflexie sticlă -->
+  <path d="M25 38V46" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+  
+  <!-- Steluță sclipitoare aurie -->
+  <path d="M47 12L49 16L53 18L49 20L47 24L45 20L41 18Z" fill="#FFD700"/>
+</svg>
