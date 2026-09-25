@@ -51,8 +51,9 @@ Deno.serve(async (_req: Request) => {
   for (const row of due ?? []) {
     const appt = (row as any).appointments;
 
-    // Programarea a fost anulată între timp: nu mai trimitem, marcăm rândul.
-    if (!appt || appt.status !== "confirmed") {
+    // Programarea a fost ștearsă, anulată sau deja finalizată între timp: nu mai trimitem.
+    // Statusul "unconfirmed" NU mai e exclus — trimitem și pentru el, doar marcăm în text.
+    if (!appt || appt.status === "cancelled" || appt.status === "completed") {
       await supabase
         .from("scheduled_notifications")
         .update({ status: "cancelled" })
@@ -60,6 +61,8 @@ Deno.serve(async (_req: Request) => {
       skipped++;
       continue;
     }
+
+    const isUnconfirmed = appt.status === "unconfirmed";
 
     const graceLimit = new Date(row.scheduled_send_at);
     graceLimit.setMinutes(graceLimit.getMinutes() + MISSED_GRACE_MINUTES);
@@ -83,10 +86,12 @@ Deno.serve(async (_req: Request) => {
     }
 
     const payload = JSON.stringify({
-      title: "Programare în curând!",
+      title: isUnconfirmed ? "Programare neconfirmată în curând!" : "Programare în curând!",
       body: `${appt.clients?.name || "Clientă"} — ${appt.services?.name || "programare"} la ${new Date(
         appt.start_time
-      ).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}`,
+      ).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${
+        isUnconfirmed ? " · Încă neconfirmată" : ""
+      }`,
       tag: `appt-${row.appointment_id}`,
       appointmentId: row.appointment_id,
     });
