@@ -125,8 +125,19 @@
   .brand{ display:flex; flex-direction:column; }
   .brand-title-row{ display:flex; align-items:center; gap:7px; }
   .brand-title{ font-family:var(--font-display); font-weight:600; font-size:16px; }
-  .conn-dot{ width:8px; height:8px; border-radius:50%; background:var(--success); flex:none; }
-  .conn-dot.offline{ background:var(--warn); }
+  .conn-status{
+    display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700;
+    padding:3px 8px 3px 6px; border-radius:999px; background:var(--success-soft); color:var(--success);
+    letter-spacing:.01em; flex:none;
+  }
+  .conn-status .conn-dot{ width:7px; height:7px; border-radius:50%; background:var(--success); flex:none; }
+  .conn-status.offline{ background:#FBE7D2; color:#8A5A12; }
+  .conn-status.offline .conn-dot{ background:var(--warn); }
+  .conn-status.saving{ background:var(--accent-soft); color:var(--accent-dark); }
+  .conn-status.saving .conn-dot{ background:var(--accent); animation:connPulse 1s ease-in-out infinite; }
+  .conn-status.error{ background:#FBDADA; color:#B42318; }
+  .conn-status.error .conn-dot{ background:#D93838; }
+  @keyframes connPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
   .brand-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:1px; }
   .header-actions{ display:flex; gap:6px; }
   .icon-btn{
@@ -617,6 +628,9 @@
   .activity-log-action-editare{ color:var(--accent-dark); }
   .activity-log-action-anulare{ color:var(--warn); }
   .activity-log-action-ștergere{ color:var(--danger); }
+  .activity-log-action-confirmare{ color:var(--success); }
+  .activity-log-action-finalizare{ color:var(--accent-dark); }
+  .activity-log-action-eroare{ color:var(--danger); font-weight:800; }
   .activity-log-desc{ color:var(--ink); }
   .wd-row{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
@@ -1174,13 +1188,80 @@ function dismissToast(id){
   if (el) el.remove();
 }
 
-/* ====================== CONNECTIVITY DOT ====================== */
-function updateConnDot(){
-  const dot = document.getElementById('connDot');
-  if (!dot) return;
-  dot.classList.toggle('offline', !navigator.onLine);
-  dot.title = navigator.onLine ? 'Conectat' : 'Fără conexiune';
+/* ====================== STATUS CONEXIUNE / SESIUNE ======================
+ * Bulina veche arăta doar navigator.onLine, care poate minți: un dispozitiv
+ * poate fi "online" din punctul de vedere al browserului și totuși orice
+ * salvare să eșueze (sesiune expirată, Supabase blocat de o rețea/extensie
+ * etc.). Indicatorul de mai jos e permanent vizibil în antet și reflectă
+ * starea REALĂ, dedusă din rezultatul ultimelor cereri către Supabase —
+ * nu doar din API-ul de rețea al browserului. */
+let connErrorStreak = 0;
+
+function updateConnDot(kind, label){
+  const el = document.getElementById('connStatus');
+  if (!el) return;
+  const labelEl = document.getElementById('connStatusLabel');
+  const resolved = kind || (navigator.onLine ? 'ok' : 'offline');
+  el.className = 'conn-status' + (resolved === 'ok' ? '' : ` ${resolved}`);
+  const defaults = { ok:'Conectat', offline:'Fără conexiune', saving:'Se salvează…', error:'Eroare de sincronizare' };
+  const text = label || defaults[resolved] || 'Conectat';
+  if (labelEl) labelEl.textContent = text;
+  el.title = text;
 }
+
+/** Deosebește o eroare de REȚEA (offline — deja tratată de coada offline)
+ * de o eroare de SESIUNE (autentificare expirată/pierdută) de orice altă
+ * eroare de server, ca să arătăm mesajul potrivit în loc de unul generic. */
+function classifyDbError(e){
+  if (isNetworkError(e)) return 'offline';
+  const status = e && (e.status || e.code);
+  const msg = ((e && e.message) || '').toLowerCase();
+  if (status === 401 || status === 403 || msg.includes('jwt') || msg.includes('refresh_token') || msg.includes('not authenticated') || msg.includes('invalid claim')) return 'auth';
+  return 'server';
+}
+
+/** Apelată din catch-urile acțiunilor de salvare pe programări: actualizează
+ * bulina din antet cu starea reală și, dacă problema NU e doar lipsa de
+ * rețea (aceea se vede oricum din banner-ul offline + coada locală), scrie
+ * și un rând EROARE în jurnal — ca eroarea să rămână vizibilă acolo chiar
+ * dacă utilizatoarea a ratat toast-ul de câteva secunde. */
+function reportDbError(e, contextLabel){
+  const kind = classifyDbError(e);
+  if (kind === 'offline'){ updateConnDot(); return; }
+  connErrorStreak++;
+  if (kind === 'auth'){
+    updateConnDot('error', 'Sesiune expirată');
+    showToast('Sesiunea pare expirată — ce ai făcut acum NU s-a salvat. Ieși din cont (butonul din antet) și reintră.', 'error', { persist: true, id: 'authErrorBanner' });
+  } else {
+    updateConnDot('error', 'Eroare la salvare');
+    if (connErrorStreak >= 2){
+      showToast(`Ultimele ${connErrorStreak} salvări au eșuat — vezi Jurnalul de activitate din Setări pentru detalii.`, 'error', { persist: true, id: 'repeatedErrorBanner' });
+    }
+  }
+  logActivity('EROARE', `${contextLabel || 'acțiune'} — ${(e && e.message) || String(e)}`);
+}
+function reportDbSuccess(){
+  connErrorStreak = 0;
+  dismissToast('authErrorBanner');
+  dismissToast('repeatedErrorBanner');
+  updateConnDot('ok');
+}
+
+/** Verificare periodică de sănătate a sesiunii — pe unele dispozitive/PWA-uri
+ * o filă lăsată deschisă zile la rând poate rămâne cu un token expirat fără
+ * ca onAuthStateChange să se declanșeze; asta arată exact ca „nu mi se
+ * salvează nimic și nu știu de ce”. Verificăm la revenirea în filă și periodic. */
+async function checkSessionHealth(){
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session && state.session){
+      updateConnDot('error', 'Sesiune expirată');
+      showToast('Sesiunea de autentificare s-a pierdut — ieși din cont și reintră ca să poți salva din nou.', 'error', { persist: true, id: 'authErrorBanner' });
+    }
+  } catch (e){ /* verificare best-effort, nu blocăm nimic dacă eșuează */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkSessionHealth(); });
+setInterval(checkSessionHealth, 90000);
 
 /* ====================== OFFLINE QUEUE (localStorage) ====================== */
 function loadPendingFromStorage(){
@@ -1693,6 +1774,7 @@ async function createClientSmart(name, phone){
       // disponibilă instant în orice picker/căutare din aplicație.
       state.clients.push(client);
       state.clients.sort((a, b) => a.name.localeCompare(b.name));
+      logActivity('CREARE', `Clientă nouă: ${name}${phone ? ' - ' + phone : ''}`);
       return { ok: true, offline: false, client };
     } catch (e){
       if (!isNetworkError(e)) throw e;
@@ -2277,8 +2359,8 @@ function renderAppShell(){
       <header class="top">
         <div class="top-row">
           <div class="brand-title-row">
-            <span class="conn-dot" id="connDot"></span>
             <span class="brand-title">Agendă</span>
+            <span class="conn-status" id="connStatus" title="Conectat"><span class="conn-dot"></span><span id="connStatusLabel">Conectat</span></span>
           </div>
           <div class="header-actions">
             <button class="btn-upcoming" id="upcomingBtn" title="Urmează (14 zile)">
@@ -2967,6 +3049,9 @@ async function deleteCustomTaskOptimistic(id){
     if (idsToDelete.length === 1) await deleteCustomTask(idsToDelete[0]);
     else await deleteCustomTasksBulk(idsToDelete);
     updateToast(toastId, idsToDelete.length > 1 ? `${idsToDelete.length} sarcini șterse.` : 'Sarcină ștearsă.', 'success', 1800);
+    logActivity('ȘTERGERE', idsToDelete.length > 1
+      ? `${idsToDelete.length} sarcini șterse: ${(task && task.title) || 'sarcină repetată'}`
+      : `Sarcină: ${(removedEntries[0] && removedEntries[0].title) || ''}`);
   } catch (e){
     cache.customTasks.push(...removedEntries);
     renderDayFromCache();
@@ -2996,7 +3081,9 @@ async function cancelAppointmentOptimistic(id){
     if (previous){
       logActivity('ANULARE', `${previous.clientName || 'Clientă'} - ${previous.serviceName || 'serviciu'} (${previous.servicePrice || 0} lei)`);
     }
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, `anulare programare — ${previous && previous.clientName || 'clientă'}`);
     if (idx >= 0 && previous) cache.appointments[idx] = previous;
     renderDayFromCache();
     computeMonthDayColorsFromCache();
@@ -3030,7 +3117,9 @@ async function deleteAppointmentOptimistic(id){
     if (removed){
       logActivity('ȘTERGERE', `${removed.clientName || 'Clientă'} - ${removed.serviceName || 'serviciu'} (${removed.servicePrice || 0} lei)`);
     }
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, `ștergere programare — ${removed && removed.clientName || 'clientă'}`);
     if (removed) cache.appointments.push(removed);
     renderDayFromCache();
     computeMonthDayColorsFromCache();
@@ -3484,7 +3573,7 @@ async function loadActivityLogSection(){
     }
     content.innerHTML = `<div class="activity-log-list">${rows.map(r => `
       <div class="activity-log-row">
-        <span class="activity-log-time">[${fmtDateTimeLog(new Date(r.created_at))}]</span><span class="activity-log-action activity-log-action-${(r.action || '').toLowerCase()}">${escapeHtml(r.action)}</span> <span class="activity-log-desc">programare: ${escapeHtml(r.description)}</span>
+        <span class="activity-log-time">[${fmtDateTimeLog(new Date(r.created_at))}]</span><span class="activity-log-action activity-log-action-${(r.action || '').toLowerCase()}">${escapeHtml(r.action)}</span> <span class="activity-log-desc">${escapeHtml(r.description)}</span>
       </div>
     `).join('')}</div>`;
   } catch (e){
@@ -3545,9 +3634,11 @@ function renderVacationsList(){
       renderVacationsList();
       computeMonthDayColorsFromCache(); renderCalendar();
       renderDayFromCache();
+      const deletedEntry = prevList.find(v => v.id === id);
       try {
         await deleteVacation(id);
         showToast('Concediu șters.', 'success', { autoHide: 1800 });
+        if (deletedEntry) logActivity('ȘTERGERE', `Concediu: ${fmtDateShort(deletedEntry.start)} – ${fmtDateShort(deletedEntry.end)}${deletedEntry.description ? ' - ' + deletedEntry.description : ''}`);
       } catch (e){
         cache.vacations = prevList;
         renderVacationsList();
@@ -3589,6 +3680,7 @@ async function saveNewVacation(){
     renderDayFromCache();
     okEl.textContent = 'Concediu adăugat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Concediu adăugat.', 'success', 1800);
+    logActivity('CREARE', `Concediu: ${fmtDateShort(new Date(startVal + 'T00:00:00'))} – ${fmtDateShort(new Date(endVal + 'T00:00:00'))}${desc ? ' - ' + desc : ''}`);
   } catch (e){
     errEl.textContent = 'Eroare la adăugare: ' + (e.message || e); errEl.classList.remove('hidden');
     updateToast(toastId, 'Eroare la adăugare.', 'error', 2600);
@@ -3875,6 +3967,7 @@ async function saveEditClient(){
   const notes = document.getElementById('editClientNotes').value.trim();
   if (!name){ errEl.textContent = 'Numele clientei este obligatoriu.'; errEl.classList.remove('hidden'); return; }
 
+  const before = state.clients.find(c => c.id === id) || {};
   btn.disabled = true; btn.textContent = 'Se salvează…';
   const toastId = showToast('Se salvează clienta…', 'saving', { persist: true });
   try {
@@ -3887,6 +3980,11 @@ async function saveEditClient(){
       updated = await updateClientRow(id, { name, phone, notes });
     }
     applyClientUpdateEverywhere(updated);
+    const changes = [];
+    if (before.name !== name) changes.push(`nume ${before.name || '—'} → ${name}`);
+    if ((before.phone || '') !== phone) changes.push(`telefon ${before.phone || '—'} → ${phone || '—'}`);
+    if ((before.notes || '') !== notes) changes.push('note modificate');
+    logActivity('EDITARE', `Clientă: ${name}${changes.length ? ' — ' + changes.join(', ') : ''}`);
     document.getElementById('editClientModal').close();
     // Reîmprospătează orice listă de cliente vizibilă (pagina Cliente sau picker-ele din modale).
     if (document.getElementById('browseClientList')) renderClientList('browse', document.getElementById('browseClientSearch')?.value || '', openClientDetail, { showActions: true });
@@ -3929,6 +4027,7 @@ async function deleteClientWithConfirm(id, onDone){
       if (search) renderClientList(prefix, search.value, pickerHandlers[prefix]);
     });
     updateToast(toastId, 'Clientă ștearsă.', 'success', 1800);
+    logActivity('ȘTERGERE', `Clientă: ${client.name}${client.phone ? ' - ' + client.phone : ''}`);
     if (onDone) onDone();
   } catch (e){
     updateToast(toastId, 'Eroare la ștergere: ' + (e.message || e), 'error', 3000);
@@ -4100,9 +4199,13 @@ async function handleUnconfirmedAction(id, newStatus, cardEl){
   const idx = cache.appointments.findIndex(a => a.id === id);
   try {
     await setAppointmentStatus(id, newStatus);
+    const appt = idx >= 0 ? cache.appointments[idx] : null;
     if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: newStatus };
     cardEl.remove();
     updateToast(toastId, newStatus === 'confirmed' ? 'Programare confirmată.' : 'Programare anulată.', 'success', 1800);
+    if (appt){
+      logActivity(newStatus === 'confirmed' ? 'CONFIRMARE' : 'ANULARE', `${appt.clientName || 'Clientă'} - ${appt.serviceName || 'serviciu'} (${appt.servicePrice || 0} lei)`);
+    }
     if (!document.querySelector('#unconfirmedList .unconf-card')){
       document.getElementById('unconfirmedList').innerHTML = `<p class="settings-hint" style="margin:0;">Nicio programare neconfirmată.</p>`;
     }
@@ -4110,7 +4213,9 @@ async function handleUnconfirmedAction(id, newStatus, cardEl){
     renderDayFromCache();
     computeMonthDayColorsFromCache();
     renderCalendar();
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, `${newStatus === 'confirmed' ? 'confirmare' : 'anulare'} programare`);
     buttons.forEach(b => b.disabled = false);
     updateToast(toastId, 'Eroare: ' + (e.message || e), 'error', 3000);
   }
@@ -4123,11 +4228,17 @@ async function handlePastUnresolvedCancel(id, cardEl){
   const idx = cache.appointments.findIndex(a => a.id === id);
   try {
     await updateAppointmentRow(id, { status: 'cancelled' });
+    const appt = idx >= 0 ? cache.appointments[idx] : null;
     if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'cancelled' };
     cardEl.remove();
     updateToast(toastId, 'Programare anulată.', 'success', 1800);
+    if (appt){
+      logActivity('ANULARE', `${appt.clientName || 'Clientă'} - ${appt.serviceName || 'serviciu'} (${appt.servicePrice || 0} lei) — programare trecută`);
+    }
     refreshAfterPastResolution();
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, 'anulare programare trecută');
     buttons.forEach(b => b.disabled = false);
     updateToast(toastId, 'Eroare: ' + (e.message || e), 'error', 3000);
   }
@@ -4157,13 +4268,19 @@ async function handlePastUnresolvedFinalize(id, amount, cardEl, actualDurationMi
         throw e;
       }
     }
+    const appt = idx >= 0 ? cache.appointments[idx] : null;
     if (idx >= 0) cache.appointments[idx] = { ...cache.appointments[idx], status: 'completed', paidAmount: amount };
     cardEl.remove();
     updateToast(toastId, 'Programare finalizată — venit înregistrat.', 'success', 2200);
+    if (appt){
+      logActivity('FINALIZARE', `${appt.clientName || 'Clientă'} - ${appt.serviceName || 'serviciu'} — încasat ${amount} lei${wantsDuration ? `, durată reală ${actualDurationMinutes} min` : ''}`);
+    }
     refreshAfterPastResolution();
+    reportDbSuccess();
   } catch (e){
-    buttons.forEach(b => b.disabled = false);
     const missingColumn = e && (e.code === '42703' || (e.message || '').toLowerCase().includes('paid_amount'));
+    if (!missingColumn) reportDbError(e, 'finalizare programare');
+    buttons.forEach(b => b.disabled = false);
     updateToast(toastId, missingColumn
       ? 'Coloana paid_amount lipsește încă din Supabase — rulează SQL-ul din Setări → Statistici.'
       : 'Eroare: ' + (e.message || e), 'error', 4200);
@@ -4318,6 +4435,7 @@ async function saveHours(){
     renderDayFromCache();
     okEl.textContent = 'Salvat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Interval orar salvat.', 'success', 1800);
+    logActivity('EDITARE', `Program de lucru: ${rows.map(r => `${DAYS_MON_FIRST.find(d => d.jsDay === r.weekday)?.label || r.weekday} ${minutesToHHMM(r.startMin)}–${minutesToHHMM(r.endMin)}`).join(', ')}`);
   } catch (e){
     errEl.textContent = 'Eroare la salvare: ' + (e.message || e); errEl.classList.remove('hidden');
     updateToast(toastId, 'Eroare la salvare.', 'error', 2600);
@@ -4402,6 +4520,7 @@ async function saveWeek(){
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   btn.disabled = true; btn.textContent = 'Se salvează…';
   const problems = [];
+  const changesSummary = [];
   const rows = Array.from(document.querySelectorAll('#weekRows .wd-row'));
 
   for (const row of rows){
@@ -4412,7 +4531,8 @@ async function saveWeek(){
     const shiftVal = row.dataset.shift;
     const preset = JOB_SHIFT_PRESETS.find(p => p.value === shiftVal);
     try {
-      if (off || !preset){ await clearDayJobBlock(state.employee.id, day); continue; }
+      if (off || !preset){ await clearDayJobBlock(state.employee.id, day); changesSummary.push(`${fmtDateShort(day)} liber`); continue; }
+      changesSummary.push(`${fmtDateShort(day)} ${preset.label}`);
       const startVal = preset.start;
       const endVal = preset.end;
       const dayStart = new Date(yy, mm - 1, dd, 0, 0);
@@ -4442,6 +4562,7 @@ async function saveWeek(){
   } else {
     okEl.textContent = 'Salvat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Programul săptămânii a fost salvat.', 'success', 1800);
+    logActivity('EDITARE', `Celălalt job: ${changesSummary.join(', ')}`);
   }
   loadMonthDots();
 }
@@ -4828,6 +4949,7 @@ async function saveNewService(){
     renderServicesList();
     okEl.textContent = 'Serviciu adăugat.'; okEl.classList.remove('hidden');
     updateToast(toastId, 'Serviciu adăugat.', 'success', 1800);
+    logActivity('CREARE', `Serviciu: ${name} — ${price} lei, ${durationMinutes} min`);
   } catch (e){
     if (e.code === '42703'){ errEl.textContent = 'O coloană nouă nu există încă — rulează SQL-ul de mai sus în Supabase, apoi încearcă din nou.'; }
     else { errEl.textContent = 'Eroare la adăugare: ' + (e.message || e); }
@@ -4933,6 +5055,7 @@ async function saveEditService(){
   if (!durationMinutes || durationMinutes <= 0){ errEl.textContent = 'Durata trebuie să fie un număr de minute mai mare ca 0.'; errEl.classList.remove('hidden'); return; }
   if (isNaN(price) || price < 0){ errEl.textContent = 'Prețul trebuie să fie un număr valid.'; errEl.classList.remove('hidden'); return; }
 
+  const before = state.services.find(s => s.id === id) || {};
   btn.disabled = true; btn.textContent = 'Se salvează…';
   const toastId = showToast('Se salvează serviciul…', 'saving', { persist: true });
   try {
@@ -4949,6 +5072,11 @@ async function saveEditService(){
     renderTagPills();
     renderServicesList();
     updateToast(toastId, 'Serviciu actualizat.', 'success', 1800);
+    const changes = [];
+    if (before.name !== name) changes.push(`nume ${before.name || '—'} → ${name}`);
+    if (Number(before.price) !== price) changes.push(`preț ${before.price ?? '—'} → ${price} lei`);
+    if (Number(before.durationMinutes) !== durationMinutes) changes.push(`durată ${before.durationMinutes ?? '—'} → ${durationMinutes} min`);
+    logActivity('EDITARE', `Serviciu: ${name}${changes.length ? ' — ' + changes.join(', ') : ''}`);
   } catch (e){
     errEl.textContent = 'Eroare la salvare: ' + (e.message || e);
     errEl.classList.remove('hidden');
@@ -4969,6 +5097,7 @@ async function deleteServiceWithConfirm(id){
     renderTagPills();
     renderServicesList();
     updateToast(toastId, 'Serviciu șters.', 'success', 1800);
+    logActivity('ȘTERGERE', `Serviciu: ${svc.name} — ${svc.price} lei`);
   } catch (e){
     updateToast(toastId, 'Eroare la ștergere: ' + (e.message || e), 'error', 3000);
   }
@@ -5567,10 +5696,15 @@ async function saveNewTask(){
   const toastId = showToast('Se salvează…', 'saving', { persist: true });
   try {
     if (editingId){
+      const before = cache.customTasks.find(t => t.id === editingId) || {};
       await updateCustomTask(editingId, { title, start, end, color, allowOverlap });
       const idx = cache.customTasks.findIndex(t => t.id === editingId);
       if (idx >= 0) cache.customTasks[idx] = { ...cache.customTasks[idx], title, start, end, color, allowOverlap };
       updateToast(toastId, 'Sarcină actualizată.', 'success', 1800);
+      const changes = [];
+      if (before.title !== title) changes.push(`titlu ${before.title || '—'} → ${title}`);
+      if (before.start && before.start.getTime() !== start.getTime()) changes.push(`ora început → ${fmtTime(start)}`);
+      logActivity('EDITARE', `Sarcină: ${title}${changes.length ? ' — ' + changes.join(', ') : ''}`);
     } else if (taskModalState.recurrence !== 'none'){
       const countRaw = parseInt(document.getElementById('taskRecurrenceCount').value, 10);
       const count = Math.min(60, Math.max(2, isNaN(countRaw) ? 10 : countRaw));
@@ -5601,10 +5735,12 @@ async function saveNewTask(){
         });
       });
       updateToast(toastId, `${count} sarcini repetate, salvate.`, 'success', 2200);
+      logActivity('CREARE', `Sarcini repetate: ${title} — ${count} apariții`);
     } else {
       await createCustomTask({ employeeId: state.employee.id, title, start, end, color, allowOverlap });
       cache.customTasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), employeeId: state.employee.id, title, start, end, color, allowOverlap });
       updateToast(toastId, 'Sarcină salvată.', 'success', 1800);
+      logActivity('CREARE', `Sarcină: ${title} — ${fmtDateShort(start)} ${fmtTime(start)}`);
     }
     renderDayFromCache();
     computeMonthDayColorsFromCache();
@@ -5728,7 +5864,9 @@ async function saveAppointment(){
     refreshUnconfirmedBadge();
     updateToast(toastId, 'Programare salvată.', 'success', 1800);
     logActivity('CREARE', `${modalState.selectedClient.name} - ${modalState.selectedService.name} (${Number(modalState.selectedService.price) || 0} lei)`);
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, `creare programare — ${modalState.selectedClient.name}`);
     if (isNetworkError(e)){
       goOffline();
     } else {
@@ -6134,8 +6272,15 @@ async function saveEditAppointment(){
     await updateAppointmentRow(id, payload);
     refreshUnconfirmedBadge();
     updateToast(toastId, 'Programare actualizată.', 'success', 1800);
-    logActivity('EDITARE', `${editState.selectedClient.name} - ${editState.selectedService.name} (${Number(editState.selectedService.price) || 0} lei)`);
+    const changes = [];
+    if (previous && previous.status !== status) changes.push(`status ${STATUS_LABELS_RO[previous.status] || previous.status} → ${STATUS_LABELS_RO[status] || status}`);
+    if (previous && (previous.serviceName !== editState.selectedService.name)) changes.push(`serviciu ${previous.serviceName} → ${editState.selectedService.name}`);
+    if (previous && (previous.clientName !== editState.selectedClient.name)) changes.push(`clientă ${previous.clientName} → ${editState.selectedClient.name}`);
+    if (editState.selectedSlot) changes.push(`oră → ${fmtTime(editState.selectedSlot.start)}`);
+    logActivity('EDITARE', `${editState.selectedClient.name} - ${editState.selectedService.name} (${Number(editState.selectedService.price) || 0} lei)${changes.length ? ' — modificat: ' + changes.join(', ') : ''}`);
+    reportDbSuccess();
   } catch (e){
+    reportDbError(e, `editare programare — ${editState.selectedClient.name}`);
     if (idx >= 0 && previous) cache.appointments[idx] = previous;
     renderDayFromCache();
     computeMonthDayColorsFromCache();
