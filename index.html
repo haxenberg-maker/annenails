@@ -1635,7 +1635,7 @@ async function storeGoogleCalendarToken(refreshToken){
     // s-a întâmplat (cont neînregistrat, sesiune invalidă etc.).
     let detail = error.message || String(error);
     if (error.context && typeof error.context.json === 'function'){
-      try { const body = await error.context.json(); if (body?.error) detail = body.error; } catch (e2){ /* rămâne mesajul generic */ }
+      try { const body = await error.context.json(); if (body?.error) detail = body.error + (body.debug ? ` [${body.debug}]` : ''); } catch (e2){ /* rămâne mesajul generic */ }
     }
     throw new Error(detail);
   }
