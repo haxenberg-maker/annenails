@@ -6387,14 +6387,6 @@ async function bootstrapApp(){
     state.allEmployees = []; state.myEmployee = null; state.isAdmin = false; state.employee = null;
   }
 
-  // La primul login cu Google, sesiunea conține tokenul de reîmprospătare
-  // pentru Google Calendar — îl trimitem o singură dată către Edge Function
-  // ca să fie salvat sigur (server-side), ca să putem sincroniza calendarul
-  // mai târziu fără să-i cerem din nou accesul.
-  if (state.employee && state.session?.provider_refresh_token && state.session.provider_token){
-    storeGoogleCalendarToken(state.session.provider_refresh_token).catch(() => {});
-  }
-
   await loadEmployeeScopedData();
 
   await handleRoute();
@@ -6540,9 +6532,19 @@ window.addEventListener('appinstalled', () => {
 injectPwaManifest();
 registerServiceWorker();
 
-sb.auth.onAuthStateChange((_event, session) => {
+sb.auth.onAuthStateChange((event, session) => {
   const wasLoggedIn = !!state.session;
   state.session = session;
+  // IMPORTANT: Supabase NU păstrează tokenul Google în sesiunea persistată
+  // (din motive de securitate) — e disponibil DOAR chiar aici, în acest
+  // eveniment exact de SIGNED_IN, nu și mai târziu prin getSession(). De
+  // aceea trebuie prins direct din parametrul `session` de mai jos, nu din
+  // state.session citit ulterior (care poate ajunge să nu-l mai aibă).
+  if (event === 'SIGNED_IN' && session?.provider_refresh_token){
+    storeGoogleCalendarToken(session.provider_refresh_token).catch(e => {
+      showToast('Nu s-a putut salva accesul la Google Calendar: ' + (e.message || e), 'error', { persist: true, id: 'calTokenErrorBanner' });
+    });
+  }
   if (session){ if (!wasLoggedIn) bootstrapApp(); }
   else { renderLogin(); }
 });
