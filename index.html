@@ -92,6 +92,14 @@
   .login-sub{
     text-align:center; color:var(--ink-soft); font-size:14px; margin:0 0 28px 0;
   }
+  .btn-google{
+    width:100%; padding:12px 14px; border-radius:var(--radius-sm);
+    background:#fff; color:#3A2430; border:1px solid var(--border); font-size:15px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer;
+  }
+  .btn-google:hover{ background:#FBF4F7; }
+  .btn-google:disabled{ opacity:.6; cursor:default; }
+  .login-note{ text-align:center; color:var(--ink-soft); font-size:12px; margin-top:18px; line-height:1.5; }
   .field{ margin-bottom:14px; }
   .field label{ display:block; font-size:13px; color:var(--ink-soft); margin-bottom:6px; }
   .field input, .field textarea{
@@ -213,6 +221,12 @@
   .cal-today-btn:hover{ border-color:var(--accent); color:var(--accent-dark); }
 
   .agenda-employee{ font-size:12.5px; color:var(--ink-soft); }
+  .agenda-employee-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .employee-switch{
+    font-size:12px; font-weight:600; color:var(--accent-dark); background:var(--accent-soft);
+    border:1px solid var(--accent-soft); border-radius:999px; padding:3px 10px; cursor:pointer;
+  }
+  .employee-switch.hidden{ display:none; }
   .agenda-date{ font-family:var(--font-display); font-weight:600; font-size:19px; margin-top:2px; margin-bottom:16px; }
 
   .day-state{ text-align:center; color:var(--ink-soft); font-size:14px; padding:48px 12px; }
@@ -1606,6 +1620,18 @@ async function getEmployees(){
   return data;
 }
 
+/** Trimite tokenul de reîmprospătare Google către Edge Function, ca să fie
+ * salvat server-side (clientul nu are voie să scrie direct în
+ * google_calendar_tokens — vezi politicile din SQL). Best-effort: dacă
+ * eșuează, sincronizarea automată cu Google Calendar pur și simplu nu va
+ * funcționa până la următorul login, dar restul aplicației merge normal. */
+async function storeGoogleCalendarToken(refreshToken){
+  const { error } = await sb.functions.invoke('store-google-calendar-token', {
+    body: { refresh_token: refreshToken },
+  });
+  if (error) throw error;
+}
+
 function mapServiceRow(s){
   return {
     id: s.id,
@@ -2319,29 +2345,28 @@ function renderLogin(errorMsg){
         <div class="login-mark">U</div>
         <h1 class="login-title">Programări Unghii</h1>
         <p class="login-sub">Intră în cont ca să vezi programările</p>
-        <div class="field">
-          <label for="loginEmail">Email</label>
-          <input id="loginEmail" type="email" autocomplete="username" />
-        </div>
-        <div class="field">
-          <label for="loginPass">Parolă</label>
-          <input id="loginPass" type="password" autocomplete="current-password" />
-        </div>
         ${errorMsg ? `<p class="error-text">${escapeHtml(errorMsg)}</p>` : ''}
-        <button id="loginBtn" class="btn-primary">Intră în cont</button>
+        <button id="googleLoginBtn" class="btn-google">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.8 2.73v2.27h2.92c1.7-1.57 2.68-3.88 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.17l-2.92-2.27c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.97 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.94H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.06l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.94l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+          Continuă cu Google
+        </button>
+        <p class="login-note">Doar conturile Google autorizate au acces la această aplicație.</p>
       </div>
     </div>
   `;
-  const btn = document.getElementById('loginBtn');
-  const doLogin = async () => {
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPass').value;
-    btn.disabled = true; btn.textContent = 'Se conectează…';
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) renderLogin('Autentificare eșuată. Verifică email/parolă.');
-  };
-  btn.addEventListener('click', doLogin);
-  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  const btn = document.getElementById('googleLoginBtn');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Se deschide Google…';
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        scopes: 'https://www.googleapis.com/auth/calendar.events',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    });
+    if (error){ renderLogin('Autentificare eșuată: ' + (error.message || error)); }
+  });
 }
 
 /* ====================== RENDER: APP SHELL (calendar) ====================== */
@@ -2394,7 +2419,10 @@ function renderAppShell(){
           <button class="cal-today-btn" id="todayBtn">Mergi la azi</button>
         </section>
         <section class="panel" id="agendaPanel">
-          <div class="agenda-employee" id="employeeSub2">Programul zilei</div>
+          <div class="agenda-employee-row">
+            <span class="agenda-employee" id="employeeSub2">Programul zilei</span>
+            <select id="employeeSwitch" class="employee-switch hidden"></select>
+          </div>
           <div class="agenda-date" id="agendaDate"></div>
           <div class="agenda-total" id="agendaTotal"></div>
           <div id="dayContent"></div>
@@ -2407,6 +2435,7 @@ function renderAppShell(){
   document.getElementById('logoutBtn').addEventListener('click', () => sb.auth.signOut());
   document.getElementById('settingsBtn').addEventListener('click', goSettings);
   document.getElementById('upcomingBtn').addEventListener('click', openUpcomingModal);
+  document.getElementById('employeeSwitch').addEventListener('change', e => switchActiveEmployee(e.target.value));
   document.getElementById('prevMonth').addEventListener('click', () => changeMonth(-1));
   document.getElementById('nextMonth').addEventListener('click', () => changeMonth(1));
   wireCalendarSwipe();
@@ -2608,6 +2637,19 @@ function refreshHeaderInfo(){
   if (sub2) sub2.textContent = `Programul lui ${name}`;
   const agendaDate = document.getElementById('agendaDate');
   if (agendaDate) agendaDate.textContent = fmtDateHeader(state.selectedDay);
+
+  const switchEl = document.getElementById('employeeSwitch');
+  if (switchEl){
+    if (state.isAdmin && state.allEmployees && state.allEmployees.length > 1){
+      switchEl.innerHTML = state.allEmployees.map(e =>
+        `<option value="${e.id}">${escapeHtml(e.id === state.myEmployee?.id ? 'Tu' : e.name)}</option>`
+      ).join('');
+      switchEl.value = state.employee ? state.employee.id : '';
+      switchEl.classList.remove('hidden');
+    } else {
+      switchEl.classList.add('hidden');
+    }
+  }
 }
 
 function syncMainViewToDay(day){
@@ -6295,20 +6337,13 @@ async function saveEditAppointment(){
 }
 
 /* ====================== BOOTSTRAP & AUTH ====================== */
-async function bootstrapApp(){
-  ensureModal();
-  ensureEditModal();
-  loadPendingFromStorage();
-  state.calendarMonth = new Date(state.selectedDay.getFullYear(), state.selectedDay.getMonth(), 1);
-  try { const employees = await getEmployees(); state.employee = employees[0] || null; }
-  catch (e){ state.employee = null; }
-
-  // Dacă notificările erau deja permise dintr-o sesiune anterioară, ne asigurăm
-  // că abonamentul push e salvat pentru angajata curentă (abia acum știută).
+/** Încarcă tot ce ține de agenda activă (state.employee) — separată de
+ * restul bootstrap-ului ca să poată fi rulată din nou când adminul comută
+ * pe agenda celeilalte angajate, fără să reia tot de la zero. */
+async function loadEmployeeScopedData(){
   if (state.employee && 'Notification' in window && Notification.permission === 'granted'){
     subscribeToPush();
   }
-
   if (state.employee){
     try {
       const { map, missingTable } = await getWeekdayHours(state.employee.id);
@@ -6321,6 +6356,46 @@ async function bootstrapApp(){
   } else {
     try { state.services = await getServices(); } catch (e){ state.services = []; }
   }
+}
+
+/** Adminul comută agenda pe care o vede/editează — practic „intră" pe
+ * contul celeilalte angajate pentru scop de vizualizare/adăugare, fără să
+ * schimbe cine e logat de fapt (asta rămâne state.myEmployee). */
+async function switchActiveEmployee(employeeId){
+  const target = state.allEmployees.find(e => e.id === employeeId);
+  if (!target) return;
+  state.employee = target;
+  await loadEmployeeScopedData();
+  await handleRoute();
+  refreshUnconfirmedBadge();
+}
+
+async function bootstrapApp(){
+  ensureModal();
+  ensureEditModal();
+  loadPendingFromStorage();
+  state.calendarMonth = new Date(state.selectedDay.getFullYear(), state.selectedDay.getMonth(), 1);
+
+  try {
+    const employees = await getEmployees();
+    state.allEmployees = employees;
+    const myEmail = (state.session?.user?.email || '').toLowerCase();
+    state.myEmployee = employees.find(e => (e.email || '').toLowerCase() === myEmail) || null;
+    state.isAdmin = !!(state.myEmployee && state.myEmployee.is_admin);
+    state.employee = state.myEmployee || employees[0] || null;
+  } catch (e){
+    state.allEmployees = []; state.myEmployee = null; state.isAdmin = false; state.employee = null;
+  }
+
+  // La primul login cu Google, sesiunea conține tokenul de reîmprospătare
+  // pentru Google Calendar — îl trimitem o singură dată către Edge Function
+  // ca să fie salvat sigur (server-side), ca să putem sincroniza calendarul
+  // mai târziu fără să-i cerem din nou accesul.
+  if (state.employee && state.session?.provider_refresh_token && state.session.provider_token){
+    storeGoogleCalendarToken(state.session.provider_refresh_token).catch(() => {});
+  }
+
+  await loadEmployeeScopedData();
 
   await handleRoute();
   if (navigator.onLine) trySyncOfflineQueue();
