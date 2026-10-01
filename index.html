@@ -1423,6 +1423,7 @@ async function setNotifLeadMinutes(minutes){
       .eq('id', state.employee.id);
     if (error) throw error;
     state.employee.notif_lead_minutes = minutes;
+    logActivity('EDITARE', `Interval memento notificări: ${minutes} minute înainte`);
   } catch (e){
     showToast('Nu am putut salva intervalul pe server: ' + (e.message || e), 'error', { autoHide: 3000 });
   }
