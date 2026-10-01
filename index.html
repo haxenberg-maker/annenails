@@ -213,6 +213,16 @@
     display:flex; flex-wrap:nowrap; gap:3px; align-items:center; justify-content:center;
   }
   .day-dot{ width:5.5px; height:5.5px; border-radius:50%; flex:none; }
+  /* La 4 buline pe o zi, cercul celulei e prea mic să le încapă la mărimea
+     normală fără să se reverse peste cifra zilei — le micșorăm puțin. De la
+     5 în sus, arătăm doar primele 4 + un „+N” în loc să înghesuim tot mai
+     multe puncte ilizibile. */
+  .dots-container.dots-4{ gap:1.5px; }
+  .dots-container.dots-4 .day-dot{ width:4.5px; height:4.5px; }
+  .dots-container.dots-many{ gap:1.5px; }
+  .dots-container.dots-many .day-dot{ width:4px; height:4px; }
+  .dots-more{ font-size:7px; font-weight:800; line-height:1; color:var(--ink-soft); margin-left:1px; }
+  .cal-cell.selected .dots-more{ color:#fff; }
   .cal-cell.selected .day-dot{ background:#fff !important; opacity:.9; }
   .cal-today-btn{
     margin-top:14px; width:100%; padding:9px; border-radius:var(--radius-sm); border:1px solid var(--border);
@@ -2770,11 +2780,21 @@ function renderCalendar(){
     const vacColor = state.vacationDaysInMonth.get(key);
     const cls = ['cal-cell', isSameDay(d, state.selectedDay) ? 'selected' : '', isSameDay(d, today) ? 'today' : '', vacColor ? 'vacation' : ''].join(' ').trim();
     const colors = state.monthDayColors.get(key) || [];
-    const dots = colors.slice(0, 6).map(c => `<span class="day-dot" style="background:${c}"></span>`).join('');
+    let dots = '', dotsWrapClass = '';
+    if (colors.length <= 3){
+      dots = colors.map(c => `<span class="day-dot" style="background:${c}"></span>`).join('');
+    } else if (colors.length === 4){
+      dotsWrapClass = ' dots-4';
+      dots = colors.map(c => `<span class="day-dot" style="background:${c}"></span>`).join('');
+    } else {
+      dotsWrapClass = ' dots-many';
+      dots = colors.slice(0, 4).map(c => `<span class="day-dot" style="background:${c}"></span>`).join('')
+        + `<span class="dots-more">+${colors.length - 4}</span>`;
+    }
     const tintStyle = vacColor ? ` style="--vac-tint:${hexToRgba(vacColor, 0.22)}"` : '';
     html += `<button type="button" class="${cls}" data-date="${key}"${tintStyle}>
       <span class="cal-daynum">${day}</span>
-      ${dots ? `<span class="dots-container">${dots}</span>` : ''}
+      ${dots ? `<span class="dots-container${dotsWrapClass}">${dots}</span>` : ''}
     </button>`;
   }
   grid.innerHTML = html;
@@ -6371,11 +6391,52 @@ async function loadEmployeeScopedData(){
 /** Adminul comută agenda pe care o vede/editează — practic „intră" pe
  * contul celeilalte angajate pentru scop de vizualizare/adăugare, fără să
  * schimbe cine e logat de fapt (asta rămâne state.myEmployee). */
+/* ====================== SINCRONIZARE LIVE (REALTIME) ======================
+ * Când cineva modifică programări/sarcini/concedii/programul celuilalt job
+ * de pe alt dispozitiv sau cont, reîncărcăm automat agenda activă aici —
+ * fără să fie nevoie de refresh manual. Necesită ca tabelele să fie
+ * adăugate la publicația supabase_realtime (vezi SQL-ul livrat separat). */
+let realtimeChannel = null;
+let realtimeReloadTimer = null;
+
+function scheduleRealtimeReload(){
+  clearTimeout(realtimeReloadTimer);
+  realtimeReloadTimer = setTimeout(async () => {
+    try {
+      await bulkLoadCache();
+      mergePendingIntoCache();
+      renderDayFromCache();
+      computeMonthDayColorsFromCache();
+      renderCalendar();
+      refreshUnconfirmedBadge();
+    } catch (e){ /* reîncercăm oricum la următoarea schimbare care sosește */ }
+  }, 400); // scurtă întârziere ca să grupăm mai multe schimbări apropiate într-un singur reload
+}
+
+function subscribeRealtimeForEmployee(employeeId){
+  if (realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (!employeeId) return;
+  const tables = ['appointments', 'custom_tasks', 'vacations', 'main_job_blocks'];
+  let channel = sb.channel(`agenda-live-${employeeId}`);
+  tables.forEach(table => {
+    channel = channel.on('postgres_changes',
+      { event: '*', schema: 'public', table, filter: `employee_id=eq.${employeeId}` },
+      scheduleRealtimeReload
+    );
+  });
+  realtimeChannel = channel.subscribe();
+}
+
+function unsubscribeRealtime(){
+  if (realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+}
+
 async function switchActiveEmployee(employeeId){
   const target = state.allEmployees.find(e => e.id === employeeId);
   if (!target) return;
   state.employee = target;
   await loadEmployeeScopedData();
+  subscribeRealtimeForEmployee(target.id);
   await handleRoute();
   refreshUnconfirmedBadge();
 }
@@ -6398,6 +6459,7 @@ async function bootstrapApp(){
   }
 
   await loadEmployeeScopedData();
+  subscribeRealtimeForEmployee(state.employee ? state.employee.id : null);
 
   await handleRoute();
   if (navigator.onLine) trySyncOfflineQueue();
@@ -6556,7 +6618,7 @@ sb.auth.onAuthStateChange((event, session) => {
     });
   }
   if (session){ if (!wasLoggedIn) bootstrapApp(); }
-  else { renderLogin(); }
+  else { unsubscribeRealtime(); renderLogin(); }
 });
 
 (async () => {
